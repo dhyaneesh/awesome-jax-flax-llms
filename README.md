@@ -41,7 +41,12 @@ Each model has its own Jupyter notebook. Navigate to the respective directories 
 ## 🔥 **Next Steps**  
 - 🏗 **Fine-tuning Support**: Enabling training on custom datasets.  
 - ⚡ **Larger Model Implementations**: Expanding the repo with more LLMs.  
-- 🏆 **Performance Optimizations**: Enhancing TPU inference efficiency based on strategies outlined in [HighPerfLLMs2024](https://github.com/rwitten/HighPerfLLMs2024) and the [JAX Scaling Book](https://jax-ml.github.io/scaling-book/).  
+
+## 📖 **References**
+
+[1] HighPerfLLMs2024. Available: https://github.com/rwitten/HighPerfLLMs2024
+[2] JAX Scaling Book. Available: https://jax-ml.github.io/scaling-book/
+
 
 ## 📜 **License**  
 This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See the [LICENSE](LICENSE) file for details.  
