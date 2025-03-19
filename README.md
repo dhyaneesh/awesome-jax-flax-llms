@@ -20,12 +20,8 @@ A compact transformer-based language model implemented in **pure JAX/Flax**. Thi
 📌 *Notebook: `models/gpt-2/gpt2_in_jax.ipynb`*  
 📌 *Script: `models/gpt-2/train.py`*  
 
-### ⏳ **Llama 2 - JAX (WIP)**  
-An effort to bring **Meta’s Llama 2** to JAX, focusing on **memory-efficient attention** and **scalability for TPU-based pretraining**. This implementation aims to push **large-scale inference and training** in JAX environments.  
-
 ### ⏳ **Llama 3 - JAX (WIP)**  
 An extension of the Llama series, incorporating **state-of-the-art optimizations** in JAX for handling **longer context windows** and **reduced memory footprint** with precision tuning.  
-
 
 ### 📅 **Mistral - JAX (Coming Soon)**  
 A high-performance implementation of the **Mistral architecture**, featuring **dense & sparse mixture-of-expert layers**. This model will showcase **advanced TPU utilization** and optimized autoregressive decoding.  
