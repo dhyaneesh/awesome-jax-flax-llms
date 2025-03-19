@@ -45,6 +45,7 @@ Each model has its own Jupyter notebook. Navigate to the respective directories 
 ## 📖 **References**
 
 [1] HighPerfLLMs2024. Available: https://github.com/rwitten/HighPerfLLMs2024
+
 [2] JAX Scaling Book. Available: https://jax-ml.github.io/scaling-book/
 
 
