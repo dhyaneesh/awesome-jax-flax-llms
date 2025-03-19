@@ -1,15 +1,15 @@
----
-
 # 🚀 **Awesome JAX & Flax LLMs**  
 
 Welcome to [awesome-jax-flax-llms](https://github.com/dhyaneesh/awesome-jax-flax-llms), a curated collection of open-source large language model (LLM) implementations built with **JAX & Flax**. This repository provides modular, efficient, and scalable implementations of transformer-based models, optimized for **high-speed TPU/GPU training** and **efficient inference**.  
+
+Inspired by research and best practices from [HighPerfLLMs2024](https://github.com/rwitten/HighPerfLLMs2024) and the [JAX Scaling Book](https://jax-ml.github.io/scaling-book/), this repository aims to push the boundaries of JAX-based LLM development.  
 
 ## 🛠 **Features**  
 - ✅ **Multiple LLM architectures implemented in JAX/Flax**  
 - ✅ **Optimized for TPU acceleration with JAX’s XLA compiler**  
 - ✅ **Highly modular & extensible codebase**  
 - ✅ **Efficient training with Optax optimizers**  
-- ✅ **Hugging face support to train on various datasets**  
+- ✅ **Hugging Face support to train on various datasets**  
 - ⏳ **Fine-tuning support (Coming Soon!)**  
 
 ## 📚 **Implemented Models**  
@@ -21,11 +21,10 @@ A compact transformer-based language model implemented in **pure JAX/Flax**. Thi
 📌 *Script: `models/gpt-2/train.py`*  
 
 ### ⏳ **Llama 3 - JAX (WIP)**  
-An extension of the Llama series, incorporating **state-of-the-art optimizations** in JAX for handling **longer context windows** and **reduced memory footprint** with precision tuning.  
+An extension of the Llama series, incorporating **state-of-the-art optimizations** in JAX for handling **longer context windows** and **reduced memory footprint** with precision tuning. This follows principles outlined in the [JAX Scaling Book](https://jax-ml.github.io/scaling-book/).  
 
 ### 📅 **Mistral - JAX (Coming Soon)**  
 A high-performance implementation of the **Mistral architecture**, featuring **dense & sparse mixture-of-expert layers**. This model will showcase **advanced TPU utilization** and optimized autoregressive decoding.  
-
 
 ---
 
@@ -42,7 +41,7 @@ Each model has its own Jupyter notebook. Navigate to the respective directories 
 ## 🔥 **Next Steps**  
 - 🏗 **Fine-tuning Support**: Enabling training on custom datasets.  
 - ⚡ **Larger Model Implementations**: Expanding the repo with more LLMs.  
-- 🏆 **Performance Optimizations**: Enhancing TPU inference efficiency.  
+- 🏆 **Performance Optimizations**: Enhancing TPU inference efficiency based on strategies outlined in [HighPerfLLMs2024](https://github.com/rwitten/HighPerfLLMs2024) and the [JAX Scaling Book](https://jax-ml.github.io/scaling-book/).  
 
 ## 📜 **License**  
 This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See the [LICENSE](LICENSE) file for details.  
@@ -52,3 +51,5 @@ This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**
 💡 *Contributions are welcome! Feel free to submit issues and pull requests.*  
 
 ---
+
+This version explicitly acknowledges the sources of inspiration while keeping the structure and flow intact. Let me know if you'd like any refinements! 🚀
