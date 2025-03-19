@@ -1,5 +1,7 @@
 # 📝 GPT-2 in JAX/Flax
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dhyaneesh/awesome-jax-flax-llms/blob/main/gpt2_in_jax.ipynb)
+
 This folder contains a JAX/Flax implementation of the **GPT-2** language model. As part of the larger **awesome-jax-flax-llms** project, this implementation demonstrates how to efficiently train and run transformer-based models on **TPUs and GPUs** using JAX.
 
 ## 🚀 Overview
@@ -9,6 +11,21 @@ The `gpt2_in_jax.ipynb` notebook provides a clean and modular implementation of 
 - Efficient **autoregressive text generation**.
 - Scalable training with **JAX’s parallelization features**.
 - Fine-tuning on **small to medium-scale datasets**.
+
+## 🤖 Understanding GPT-2
+
+GPT-2 (Generative Pre-trained Transformer 2) is an **autoregressive language model** that generates text by predicting the next token in a sequence. It is built using a stack of **Transformer decoder layers**, utilizing **self-attention mechanisms** to capture long-range dependencies. The key components of GPT-2 include:
+
+- **Multi-head Self-Attention**: Enables the model to attend to different parts of the input sequence simultaneously.
+- **Feedforward Neural Networks**: Processes the attended information to make predictions.
+- **Positional Encoding**: Incorporates word order information since transformers lack built-in sequence awareness.
+- **Layer Normalization & Dropout**: Improves stability and prevents overfitting.
+
+---
+
+![GPT-2 Architecture](https://miro.medium.com/v2/resize:fit:1100/format:webp/1*YZTqlV51QyhX6VL9AV31eQ.png)
+
+---
 
 ## 🛠 Features
 
@@ -42,11 +59,7 @@ pip install jax flax optax datasets transformers
 
 Execute the `gpt2_in_jax.ipynb` notebook step by step in **Google Colab (with TPU runtime)** or a local Jupyter environment with GPU support.
 
-Alternativley you can just use this link 
-
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dhyaneesh/awesome-jax-flax-llms/blob/main/gpt2_in_jax.ipynb)
-
-### **3️⃣ Fine-tune GPT-2**\* (Optional)\*
+### **3️⃣ Fine-tune GPT-2** (Optional)
 
 To fine-tune on custom datasets, modify the training loop and load your dataset using **Hugging Face Datasets** or a custom data pipeline.
 
