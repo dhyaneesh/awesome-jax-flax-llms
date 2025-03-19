@@ -1,73 +1,66 @@
----
+# 📝 GPT-2 in JAX/Flax
 
-# 🚀 **Awesome JAX & Flax LLMs**  
+This folder contains a JAX/Flax implementation of the **GPT-2** language model. As part of the larger **awesome-jax-flax-llms** project, this implementation demonstrates how to efficiently train and run transformer-based models on **TPUs and GPUs** using JAX.
 
-Welcome to [awesome-jax-flax-llms](https://github.com/dhyaneesh/awesome-jax-flax-llms), a curated collection of open-source large language model (LLM) implementations built with **JAX & Flax**. This repository provides modular, efficient, and scalable implementations of transformer-based models, optimized for **high-speed TPU/GPU training** and **efficient inference**.  
+## 🚀 Overview
 
-## 🛠 **Features**  
-- ✅ **Multiple LLM architectures implemented in JAX/Flax**  
-- ✅ **Optimized for TPU acceleration with JAX’s XLA compiler**  
-- ✅ **Highly modular & extensible codebase**  
-- ✅ **Efficient training with Optax optimizers**  
-- ✅ **Small dataset support with easy extension for larger-scale training**  
-- ⏳ **Fine-tuning support (Coming Soon!)**  
+The `gpt2_in_jax.ipynb` notebook provides a clean and modular implementation of **GPT-2** using **JAX & Flax**, leveraging JAX’s **XLA compilation** and **Optax optimizers** for accelerated training. This implementation is designed for:
 
-## 📚 **Implemented Models**  
+- Efficient **autoregressive text generation**.
+- Scalable training with **JAX’s parallelization features**.
+- Fine-tuning on **small to medium-scale datasets**.
 
-### ✅ **GPT-2 (Small) - JAX/Flax**  
-A compact transformer-based language model implemented in **pure JAX/Flax**. This implementation leverages **XLA optimizations** for parallelism, making it efficient on **TPUs and GPUs**. It serves as the foundation for exploring JAX-based language modeling.  
+## 🛠 Features
 
-📌 *Notebook: `models/gpt-2/gpt2_in_jax.ipynb`*  
+- ✅ **Pure JAX/Flax implementation** of GPT-2.
+- ✅ **Optimized for TPUs & GPUs** using JAX’s Just-In-Time (JIT) compilation.
+- ✅ **Optax-based training** for efficient optimization.
+- ✅ **Flexible model configuration**, allowing easy scaling.
+- ✅ **Minimal dependencies**, making it lightweight & easy to extend.
 
-🖼 **(Model Diagram Placeholder)**  
+## 📌 Notebook Details
 
-### ⏳ **Llama 2 - JAX (WIP)**  
-An effort to bring **Meta’s Llama 2** to JAX, focusing on **memory-efficient attention** and **scalability for TPU-based pretraining**. This implementation aims to push **large-scale inference and training** in JAX environments.  
+The notebook includes:
 
-🖼 **(Model Diagram Placeholder)**  
+- 📖 **Dataset Preparation**: Downloads and processes the *tinyshakespeare* dataset from GitHub.
+- 🏗 **Model Definition**: GPT-2 architecture built using `Flax.linen`.
+- 🎯 **Training Pipeline**: Implements loss computation, backpropagation, and optimization using `Optax`.
+- 🏎 **Inference & Generation**: Generates text samples efficiently with autoregressive decoding.
+- 📊 **Performance Evaluation**: Tracks training progress and visualizes loss curves.
 
-### ⏳ **Llama 3 - JAX (WIP)**  
-An extension of the Llama series, incorporating **state-of-the-art optimizations** in JAX for handling **longer context windows** and **reduced memory footprint** with precision tuning.  
+## 🏗 Setup & Usage
 
-🖼 **(Model Diagram Placeholder)**  
+### **1️⃣ Install Dependencies**
 
-### ⏳ **Mistral - JAX (WIP)**  
-A high-performance implementation of the **Mistral architecture**, featuring **dense & sparse mixture-of-expert layers**. This model will showcase **advanced TPU utilization** and optimized autoregressive decoding.  
+Ensure you have JAX and Flax installed. Run the following:
 
-🖼 **(Model Diagram Placeholder)**  
-
----
-
-## 📖 **Usage**  
-
-### **Recommended Environment: Google Colab**  
-These models are best run in **Google Colab**, which provides **free TPU support** for optimal performance.  
-
-### **Running the Notebooks**  
-Each model has its own Jupyter notebook. Navigate to the respective directories and open the notebook in **Google Colab** to explore the implementations.  
-
-Example (GPT-2):  
 ```bash
-cd models/gpt-2
-jupyter notebook gpt2_in_jax.ipynb
+pip install jax flax optax datasets transformers
 ```
 
-Or open it directly in Google Colab using:  
+### **2️⃣ Run the Notebook**
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dhyaneesh/awesome-jax-flax-llms/blob/main/models/gpt-2/gpt2_in_jax.ipynb)
+Execute the `gpt2_in_jax.ipynb` notebook step by step in **Google Colab (with TPU runtime)** or a local Jupyter environment with GPU support.
+
+Alternativley you can just use this link 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dhyaneesh/awesome-jax-flax-llms/blob/main/gpt2_in_jax.ipynb)
+
+### **3️⃣ Fine-tune GPT-2**\* (Optional)\*
+
+To fine-tune on custom datasets, modify the training loop and load your dataset using **Hugging Face Datasets** or a custom data pipeline.
+
+## 📖 Next Steps
+
+- 🔄 **Enable longer context training** for improved coherence.
+- 🪛 **Finetuning** the model using Hugging Face Datasets or a custom data pipeline.
+- ⚡ Optimize inference with XLA caching.
+- 📚 **Experiment with different tokenization methods**.
+
+## 📜 License
+
+This project is licensed under the **GPL-3.0** license. See the [LICENSE](../LICENSE) file for details.
 
 ---
 
-## 🔥 **Next Steps**  
-- 🏗 **Fine-tuning Support**: Enabling training on custom datasets.  
-- ⚡ **Larger Model Implementations**: Expanding the repo with more LLMs.  
-- 🏆 **Performance Optimizations**: Enhancing TPU inference efficiency.  
+💡 Contributions & feedback are welcome! 🚀
 
-## 📜 **License**  
-This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See the [LICENSE](LICENSE) file for details.  
-
----
-
-💡 *Contributions are welcome! Feel free to submit issues and pull requests.*  
-
----
