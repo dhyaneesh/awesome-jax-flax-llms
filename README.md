@@ -9,7 +9,7 @@ Welcome to [awesome-jax-flax-llms](https://github.com/dhyaneesh/awesome-jax-flax
 - ✅ **Optimized for TPU acceleration with JAX’s XLA compiler**  
 - ✅ **Highly modular & extensible codebase**  
 - ✅ **Efficient training with Optax optimizers**  
-- ✅ **Small dataset support with easy extension for larger-scale training**  
+- ✅ **Hugging face support to train on various datasets**  
 - ⏳ **Fine-tuning support (Coming Soon!)**  
 
 ## 📚 **Implemented Models**  
