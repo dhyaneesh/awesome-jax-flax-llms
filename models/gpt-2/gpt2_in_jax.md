@@ -63,11 +63,10 @@ Modify the dataset loading section in the notebook to use a dataset from **Huggi
 dataset_name = "your_huggingface/dataset"
 ```
 
-### **3️⃣ Run the Notebook or `train.py` (Coming Soon)**
+### **3️⃣ Run the Notebook or `train.py`**
 
 Execute the `gpt2_in_jax.ipynb` notebook step by step in **Google Colab (with TPU runtime)** or a local Jupyter environment with GPU support.
-
-A `train.py` script will be available soon for streamlined training outside notebooks.
+You may choose to excecute the `train.py` script if you have the sufficient resources or in a single colab code block if need be.
 
 ### **4️⃣ Fine-tune the Model (Coming Soon)**
 
@@ -75,7 +74,6 @@ Upcoming fine-tuning support will allow training GPT-2 on custom datasets.
 
 ## 📖 Next Steps
 
-- 🔄 **Enable longer context training** for improved coherence.
 - 🪛 **Fine-tuning** the model using Hugging Face Datasets or a custom data pipeline.
 - ⚡ Optimize inference with XLA caching.
 - 📚 **Experiment with different tokenization methods**.
