@@ -43,6 +43,7 @@ pip install jax flax optax datasets transformers
 Execute the `gpt2_in_jax.ipynb` notebook step by step in **Google Colab (with TPU runtime)** or a local Jupyter environment with GPU support.
 
 Alternativley you can just use this link 
+
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dhyaneesh/awesome-jax-flax-llms/blob/main/gpt2_in_jax.ipynb)
 
 ### **3️⃣ Fine-tune GPT-2**\* (Optional)\*
