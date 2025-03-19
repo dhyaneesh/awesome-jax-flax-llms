@@ -18,7 +18,7 @@ Welcome to [awesome-jax-flax-llms](https://github.com/dhyaneesh/awesome-jax-flax
 A compact transformer-based language model implemented in **pure JAX/Flax**. This implementation leverages **XLA optimizations** for parallelism, making it efficient on **TPUs and GPUs**. It serves as the foundation for exploring JAX-based language modeling.  
 
 📌 *Notebook: `models/gpt-2/gpt2_in_jax.ipynb`*  
-
+📌 *Script: `models/gpt-2/train.py`*  
 
 ### ⏳ **Llama 2 - JAX (WIP)**  
 An effort to bring **Meta’s Llama 2** to JAX, focusing on **memory-efficient attention** and **scalability for TPU-based pretraining**. This implementation aims to push **large-scale inference and training** in JAX environments.  
