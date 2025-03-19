@@ -55,18 +55,29 @@ Ensure you have JAX and Flax installed. Run the following:
 pip install jax flax optax datasets transformers
 ```
 
-### **2️⃣ Run the Notebook**
+### **2️⃣ Change the Dataset (Hugging Face)**
+
+Modify the dataset loading section in the notebook to use a dataset from **Hugging Face Datasets**. Example:
+
+```python
+from datasets import load_dataset
+dataset = load_dataset("wikitext", "wikitext-2-raw-v1")
+```
+
+### **3️⃣ Run the Notebook or `train.py` (Coming Soon)**
 
 Execute the `gpt2_in_jax.ipynb` notebook step by step in **Google Colab (with TPU runtime)** or a local Jupyter environment with GPU support.
 
-### **3️⃣ Fine-tune GPT-2** (Optional)
+A `train.py` script will be available soon for streamlined training outside notebooks.
 
-To fine-tune on custom datasets, modify the training loop and load your dataset using **Hugging Face Datasets** or a custom data pipeline.
+### **4️⃣ Fine-tune the Model (Coming Soon)**
+
+Upcoming fine-tuning support will allow training GPT-2 on custom datasets.
 
 ## 📖 Next Steps
 
 - 🔄 **Enable longer context training** for improved coherence.
-- 🪛 **Finetuning** the model using Hugging Face Datasets or a custom data pipeline.
+- 🪛 **Fine-tuning** the model using Hugging Face Datasets or a custom data pipeline.
 - ⚡ Optimize inference with XLA caching.
 - 📚 **Experiment with different tokenization methods**.
 
@@ -77,4 +88,3 @@ This project is licensed under the **GPL-3.0** license. See the [LICENSE](../LIC
 ---
 
 💡 Contributions & feedback are welcome! 🚀
-
