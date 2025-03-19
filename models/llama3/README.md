@@ -25,7 +25,7 @@ LLaMA 3 is a **decoder-only transformer model** optimized for efficiency and sca
 
 📌 **LLaMA 3 Model Architecture:**
 
-**[Insert Model Diagram Here]**
+![LLaMA 3 Architecture](https://miro.medium.com/v2/resize:fit:4800/format:webp/1*_xNP7aBpcmcMk4tXJ-Z8Mw.png)
 
 ---
 
@@ -156,3 +156,4 @@ This project is licensed under the **GPL-3.0** license. See the [LICENSE](../LIC
 ---
 
 💡 Contributions & feedback are welcome! 🚀
+
