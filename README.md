@@ -2,8 +2,6 @@
 
 Welcome to [awesome-jax-flax-llms](https://github.com/dhyaneesh/awesome-jax-flax-llms), a curated collection of open-source large language model (LLM) implementations built with **JAX & Flax**. This repository provides modular, efficient, and scalable implementations of transformer-based models, optimized for **high-speed TPU/GPU training** and **efficient inference**.  
 
-Inspired by research and best practices from [HighPerfLLMs2024](https://github.com/rwitten/HighPerfLLMs2024) and the [JAX Scaling Book](https://jax-ml.github.io/scaling-book/), this repository aims to push the boundaries of JAX-based LLM development.  
-
 ## 🛠 **Features**  
 - ✅ **Multiple LLM architectures implemented in JAX/Flax**  
 - ✅ **Optimized for TPU acceleration with JAX’s XLA compiler**  
@@ -21,7 +19,7 @@ A compact transformer-based language model implemented in **pure JAX/Flax**. Thi
 📌 *Script: `models/gpt-2/train.py`*  
 
 ### ⏳ **Llama 3 - JAX (WIP)**  
-An extension of the Llama series, incorporating **state-of-the-art optimizations** in JAX for handling **longer context windows** and **reduced memory footprint** with precision tuning. This follows principles outlined in the [JAX Scaling Book](https://jax-ml.github.io/scaling-book/).  
+An extension of the Llama series, incorporating **state-of-the-art optimizations** in JAX for handling **longer context windows** and **reduced memory footprint** with precision tuning. 
 
 ### 📅 **Mistral - JAX (Coming Soon)**  
 A high-performance implementation of the **Mistral architecture**, featuring **dense & sparse mixture-of-expert layers**. This model will showcase **advanced TPU utilization** and optimized autoregressive decoding.  
