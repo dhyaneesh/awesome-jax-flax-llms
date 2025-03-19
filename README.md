@@ -27,7 +27,7 @@ An effort to bring **Meta’s Llama 2** to JAX, focusing on **memory-efficient a
 An extension of the Llama series, incorporating **state-of-the-art optimizations** in JAX for handling **longer context windows** and **reduced memory footprint** with precision tuning.  
 
 
-### ⏳ **Mistral - JAX (Coming Soon !)**  
+### ⏳ **Mistral - JAX (Coming Soon)**  
 A high-performance implementation of the **Mistral architecture**, featuring **dense & sparse mixture-of-expert layers**. This model will showcase **advanced TPU utilization** and optimized autoregressive decoding.  
 
 
