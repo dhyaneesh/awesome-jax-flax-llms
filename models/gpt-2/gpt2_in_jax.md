@@ -60,8 +60,7 @@ pip install jax flax optax datasets transformers
 Modify the dataset loading section in the notebook to use a dataset from **Hugging Face Datasets**. Example:
 
 ```python
-from datasets import load_dataset
-dataset = load_dataset("wikitext", "wikitext-2-raw-v1")
+dataset_name = "your_huggingface/dataset"
 ```
 
 ### **3️⃣ Run the Notebook or `train.py` (Coming Soon)**
