@@ -1,48 +1,73 @@
-Here’s a solid GitHub description for your **awesome-jax-flax-llms** repo:  
-
 ---
 
-# **Awesome JAX & Flax LLMs** 🚀  
-*A curated collection of open-source large language model (LLM) implementations in JAX & Flax*  
+# 🚀 **Awesome JAX & Flax LLMs**  
 
-## 🌟 **About This Repository**  
-This repository provides **JAX & Flax implementations of open-source LLMs**, serving as **educational resources** and **starting points for research and development**. The goal is to help researchers, developers, and enthusiasts learn how to build, fine-tune, and optimize LLMs using JAX and Flax.  
+Welcome to [awesome-jax-flax-llms](https://github.com/dhyaneesh/awesome-jax-flax-llms), a curated collection of open-source large language model (LLM) implementations built with **JAX & Flax**. This repository provides modular, efficient, and scalable implementations of transformer-based models, optimized for **high-speed TPU/GPU training** and **efficient inference**.  
 
-## 📌 **Features**  
-✅ Implementations of **popular open LLMs** (GPT-2, Llama 2, Mistral, etc.)  
-✅ **Pretrained model loading & inference** using JAX & Flax  
-✅ **Fine-tuning guides** for TPU/GPU acceleration  
-✅ **Optimized training & inference** with XLA compilation  
-✅ **Well-documented Jupyter notebooks** for easy learning  
+## 🛠 **Features**  
+- ✅ **Multiple LLM architectures implemented in JAX/Flax**  
+- ✅ **Optimized for TPU acceleration with JAX’s XLA compiler**  
+- ✅ **Highly modular & extensible codebase**  
+- ✅ **Efficient training with Optax optimizers**  
+- ✅ **Small dataset support with easy extension for larger-scale training**  
+- ⏳ **Fine-tuning support (Coming Soon!)**  
 
 ## 📚 **Implemented Models**  
-- [x] **GPT-2 (Small) – JAX/Flax Implementation**  
-- [ ] **NanoGPT in JAX & Flax** *(WIP 🚧)*  
-- [ ] **Llama 2 / Mistral – Inference in JAX** *(Coming soon!)*  
 
-## 🚀 **Getting Started**  
-### 🔧 **Installation**  
-```bash
-git clone https://github.com/yourusername/awesome-jax-flax-llms.git
-cd awesome-jax-flax-llms
-pip install -r requirements.txt
-```
+### ✅ **GPT-2 (Small) - JAX/Flax**  
+A compact transformer-based language model implemented in **pure JAX/Flax**. This implementation leverages **XLA optimizations** for parallelism, making it efficient on **TPUs and GPUs**. It serves as the foundation for exploring JAX-based language modeling.  
 
-### 📜 **Run a Notebook**  
-Open a Jupyter notebook and explore:  
-```bash
-jupyter notebook notebooks/gpt2_jax_flax.ipynb
-```
+📌 *Notebook: `models/gpt-2/gpt2_in_jax.ipynb`*  
 
-## 🤝 **Contributing**  
-Contributions are welcome! Feel free to:  
-- Add new LLM implementations 🏗  
-- Improve documentation 📖  
-- Optimize training/inference performance ⚡  
+🖼 **(Model Diagram Placeholder)**  
 
-## 📜 **License**  
-MIT License – Feel free to use and modify!  
+### ⏳ **Llama 2 - JAX (WIP)**  
+An effort to bring **Meta’s Llama 2** to JAX, focusing on **memory-efficient attention** and **scalability for TPU-based pretraining**. This implementation aims to push **large-scale inference and training** in JAX environments.  
+
+🖼 **(Model Diagram Placeholder)**  
+
+### ⏳ **Llama 3 - JAX (WIP)**  
+An extension of the Llama series, incorporating **state-of-the-art optimizations** in JAX for handling **longer context windows** and **reduced memory footprint** with precision tuning.  
+
+🖼 **(Model Diagram Placeholder)**  
+
+### ⏳ **Mistral - JAX (WIP)**  
+A high-performance implementation of the **Mistral architecture**, featuring **dense & sparse mixture-of-expert layers**. This model will showcase **advanced TPU utilization** and optimized autoregressive decoding.  
+
+🖼 **(Model Diagram Placeholder)**  
 
 ---
 
-Let me know if you want specific modifications! 🚀
+## 📖 **Usage**  
+
+### **Recommended Environment: Google Colab**  
+These models are best run in **Google Colab**, which provides **free TPU support** for optimal performance.  
+
+### **Running the Notebooks**  
+Each model has its own Jupyter notebook. Navigate to the respective directories and open the notebook in **Google Colab** to explore the implementations.  
+
+Example (GPT-2):  
+```bash
+cd models/gpt-2
+jupyter notebook gpt2_in_jax.ipynb
+```
+
+Or open it directly in Google Colab using:  
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dhyaneesh/awesome-jax-flax-llms/blob/main/models/gpt-2/gpt2_in_jax.ipynb)
+
+---
+
+## 🔥 **Next Steps**  
+- 🏗 **Fine-tuning Support**: Enabling training on custom datasets.  
+- ⚡ **Larger Model Implementations**: Expanding the repo with more LLMs.  
+- 🏆 **Performance Optimizations**: Enhancing TPU inference efficiency.  
+
+## 📜 **License**  
+This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See the [LICENSE](LICENSE) file for details.  
+
+---
+
+💡 *Contributions are welcome! Feel free to submit issues and pull requests.*  
+
+---
