@@ -641,6 +641,155 @@ if __name__ == "__main__":
         val_data = data[n:]
 
         return train_data, val_data, encode, decode, vocab_size
+    def export_model(state, config, decode_fn, checkpoint_dir="model_export"):
+    """
+    Export the model parameters, configuration, and tokenizer for later use.
+    
+    Args:
+        state: The training state containing model parameters
+        config: The TransformerConfig instance used for the model
+        decode_fn: Function to decode token indices to text
+        checkpoint_dir: Directory to save the exported model
+    """
+    import os
+    import pickle
+    import json
+    
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    
+    # Extract parameters from state (handling both TPU and CPU/GPU cases)
+    if isinstance(state.params, list):
+        # For TPU: extract params from first device
+        params = jax.tree_util.tree_map(lambda x: x[0], state.params)
+    else:
+        params = state.params
+    
+    # Save model parameters
+    with open(os.path.join(checkpoint_dir, "model_params.pkl"), "wb") as f:
+        pickle.dump(params, f)
+    
+    # Save config as JSON
+    config_dict = config.__dict__
+    with open(os.path.join(checkpoint_dir, "config.json"), "w") as f:
+        json.dump(config_dict, f, indent=2)
+    
+    # Save decode function
+    with open(os.path.join(checkpoint_dir, "decode_fn.pkl"), "wb") as f:
+        pickle.dump(decode_fn, f)
+    
+    print(f"Model successfully exported to {checkpoint_dir}")
+    return checkpoint_dir
+
+def load_model(checkpoint_dir="model_export"):
+    """
+    Load a saved model for inference.
+    
+    Args:
+        checkpoint_dir: Directory containing the exported model
+        
+    Returns:
+        params: The model parameters
+        config: Reconstructed TransformerConfig
+        decode_fn: Function to decode token indices to text
+        model: Instantiated GPT model
+    """
+    import os
+    import pickle
+    import json
+    import jax
+    
+    # Load model parameters
+    with open(os.path.join(checkpoint_dir, "model_params.pkl"), "rb") as f:
+        params = pickle.load(f)
+    
+    # Load config
+    with open(os.path.join(checkpoint_dir, "config.json"), "r") as f:
+        config_dict = json.load(f)
+    
+    # Reconstruct TransformerConfig
+    config = TransformerConfig(**config_dict)
+    
+    # Load decode function
+    with open(os.path.join(checkpoint_dir, "decode_fn.pkl"), "rb") as f:
+        decode_fn = pickle.load(f)
+    
+    # Create model instance
+    model = GPT(config)
+    
+    print(f"Model successfully loaded from {checkpoint_dir}")
+    return params, config, decode_fn, model
+
+def generate_text(params, model, prompt, encode_fn, decode_fn, config, 
+                  max_new_tokens=100, temperature=0.8, top_k=40):
+    """
+    Generate text using a loaded model.
+    
+    Args:
+        params: Model parameters
+        model: GPT model instance
+        prompt: Text prompt to continue from
+        encode_fn: Function to encode text to token indices
+        decode_fn: Function to decode token indices to text
+        config: TransformerConfig for the model
+        max_new_tokens: Maximum number of tokens to generate
+        temperature: Temperature for sampling (higher = more random)
+        top_k: Number of top tokens to consider for sampling
+        
+    Returns:
+        generated_text: The complete generated text including the prompt
+    """
+    import jax
+    import jax.numpy as jnp
+    
+    # Encode the prompt
+    prompt_idx = jnp.array([encode_fn(prompt)])
+    
+    # Create RNG key
+    rng_key = jax.random.PRNGKey(42)
+    
+    # Generate text
+    generated_idx = generate(
+        params,
+        model.apply,
+        prompt_idx,
+        rng_key,
+        max_new_tokens=max_new_tokens,
+        temperature=temperature,
+        top_k=top_k,
+        block_size=config.block_size
+    )
+    
+    # Decode to text
+    generated_text = decode_fn(generated_idx[0].tolist())
+    
+    return generated_text
+
+    # Example usage:
+    """
+    # During training:
+    export_model(train_state, config, decode, checkpoint_dir="shakespeare_model")
+
+    # Later, for inference:
+    params, config, decode_fn, model = load_model(checkpoint_dir="shakespeare_model")
+
+    # You'll need to also have access to the encode function
+    # For demonstration, let's assume we saved it or reconstructed it
+    encode_fn = encode  # This should be saved or reconstructed
+
+    # Generate text from a prompt
+    prompt = "ROMEO:"
+    generated_text = generate_text(
+        params, 
+        model, 
+        prompt, 
+        encode_fn, 
+        decode_fn, 
+        config, 
+        max_new_tokens=500,
+        temperature=0.8
+    )
+    print(generated_text)
+    """
 
     use_tpu = initialize_tpu()
     num_devices = jax.device_count()
