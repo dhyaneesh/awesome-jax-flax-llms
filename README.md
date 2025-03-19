@@ -19,22 +19,17 @@ A compact transformer-based language model implemented in **pure JAX/Flax**. Thi
 
 📌 *Notebook: `models/gpt-2/gpt2_in_jax.ipynb`*  
 
-🖼 **(Model Diagram Placeholder)**  
 
 ### ⏳ **Llama 2 - JAX (WIP)**  
 An effort to bring **Meta’s Llama 2** to JAX, focusing on **memory-efficient attention** and **scalability for TPU-based pretraining**. This implementation aims to push **large-scale inference and training** in JAX environments.  
 
-🖼 **(Model Diagram Placeholder)**  
-
 ### ⏳ **Llama 3 - JAX (WIP)**  
 An extension of the Llama series, incorporating **state-of-the-art optimizations** in JAX for handling **longer context windows** and **reduced memory footprint** with precision tuning.  
 
-🖼 **(Model Diagram Placeholder)**  
 
-### ⏳ **Mistral - JAX (WIP)**  
+### ⏳ **Mistral - JAX (Coming Soon !)**  
 A high-performance implementation of the **Mistral architecture**, featuring **dense & sparse mixture-of-expert layers**. This model will showcase **advanced TPU utilization** and optimized autoregressive decoding.  
 
-🖼 **(Model Diagram Placeholder)**  
 
 ---
 
@@ -45,16 +40,6 @@ These models are best run in **Google Colab**, which provides **free TPU support
 
 ### **Running the Notebooks**  
 Each model has its own Jupyter notebook. Navigate to the respective directories and open the notebook in **Google Colab** to explore the implementations.  
-
-Example (GPT-2):  
-```bash
-cd models/gpt-2
-jupyter notebook gpt2_in_jax.ipynb
-```
-
-Or open it directly in Google Colab using:  
-
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dhyaneesh/awesome-jax-flax-llms/blob/main/models/gpt-2/gpt2_in_jax.ipynb)
 
 ---
 
