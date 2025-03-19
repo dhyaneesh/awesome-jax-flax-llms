@@ -51,5 +51,3 @@ This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**
 💡 *Contributions are welcome! Feel free to submit issues and pull requests.*  
 
 ---
-
-This version explicitly acknowledges the sources of inspiration while keeping the structure and flow intact. Let me know if you'd like any refinements! 🚀
