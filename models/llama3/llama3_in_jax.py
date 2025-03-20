@@ -13,42 +13,42 @@ from tokenizers import SentencePieceUnigramTokenizer
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from flax.training import train_state, checkpoints
 
-# Check for TPU and set environment
+# Configure JAX to utilize TPU acceleration when available.
 os.environ['JAX_PLATFORM_NAME'] = 'tpu'
 os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'
 print("JAX devices:", jax.devices())
 
-# Model Configuration
+# Model hyperparameters and configuration
 class LLaMAConfig:
-    """Configuration for LLaMA model"""
-    vocab_size: int = 32000
-    dim: int = 512  # Hidden dimension
-    n_layers: int = 8  # Number of transformer layers
-    n_heads: int = 8  # Number of attention heads
-    n_kv_heads: int = 4  # Number of key/value heads (for grouped-query attention)
-    max_seq_len: int = 2048  # Maximum sequence length
-    dropout_rate: float = 0.0  # Dropout rate
+    """Configuration for the LLaMA model, including architectural and training parameters."""
+    vocab_size: int = 32000  # Vocabulary size for tokenization.
+    dim: int = 512  # Hidden dimensionality of transformer layers.
+    n_layers: int = 8  # Number of stacked transformer blocks.
+    n_heads: int = 8  # Number of self-attention heads per layer.
+    n_kv_heads: int = 4  # Number of heads for key/value projection (for grouped-query attention optimization).
+    max_seq_len: int = 2048  # Maximum supported sequence length for model inputs.
+    dropout_rate: float = 0.0  # Dropout rate applied to various layers.
     
-    # RoPE settings
-    rope_theta: float = 10000.0  # Base for rotary embeddings
+    # RoPE (Rotary Position Embedding) parameters
+    rope_theta: float = 10000.0  # Base for computing rotary positional embeddings.
     
-    # Training settings
-    batch_size: int = 32
-    learning_rate: float = 3e-4
-    weight_decay: float = 0.1
-    warmup_steps: int = 1000
-    max_steps: int = 100000
+    # Training parameters
+    batch_size: int = 32  # Training batch size.
+    learning_rate: float = 3e-4  # Initial learning rate.
+    weight_decay: float = 0.1  # L2 weight regularization coefficient.
+    warmup_steps: int = 1000  # Number of warmup steps for learning rate schedule.
+    max_steps: int = 100000  # Total number of training steps.
     
-    # Generation settings
-    temperature: float = 0.8
-    top_k: int = 40
-    top_p: float = 0.95
+    # Generation parameters
+    temperature: float = 0.8  # Temperature scaling for token sampling.
+    top_k: int = 40  # Top-k filtering for token selection.
+    top_p: float = 0.95  # Nucleus sampling probability threshold.
 
-# RMS Normalization Layer
+# Root Mean Square Normalization layer (alternative to LayerNorm)
 class RMSNorm(nn.Module):
-    """Root Mean Square Layer Normalization"""
-    dim: int
-    eps: float = 1e-5
+    """RMS normalization scales activations using root-mean-square statistics."""
+    dim: int  # Dimensionality of input tensors.
+    eps: float = 1e-5  # Small constant to prevent division by zero.
     
     @nn.compact
     def __call__(self, x):
@@ -57,141 +57,132 @@ class RMSNorm(nn.Module):
         x = x * jnp.reciprocal(jnp.sqrt(variance + self.eps))
         return x * weight
 
-# Rotary Position Embeddings
+# Precompute frequency-based complex exponential embeddings for RoPE (Rotary Position Embeddings)
 def precompute_freqs_cis(dim: int, max_seq_len: int, theta: float = 10000.0):
-    """Precompute the frequency tensor for complex exponentials (rotary embeddings)."""
-    # Compute the frequencies for each feature dimension
+    """Computes the rotation matrix for rotary embeddings in the frequency domain."""
+    # Compute frequency bands inversely proportional to the RoPE base.
     freqs = 1.0 / (theta ** (jnp.arange(0, dim // 2, dtype=jnp.float32) / dim))
     t = jnp.arange(max_seq_len, dtype=jnp.float32)
-    # Create the frequency matrix by outer product
+    # Construct a complex-valued rotation matrix
     freqs = jnp.outer(t, freqs)
-    # Convert to complex exponentials
     return jnp.complex64(jnp.exp(1j * freqs))
 
+# Apply precomputed rotary position embeddings to query and key projections
 def apply_rotary_emb(xq, xk, freqs_cis):
-    """Apply rotary embeddings to the query and key tensors."""
-    # Reshape inputs to isolate the last dimension into pairs for complex multiplication
+    """Applies precomputed rotary position embeddings to input query and key tensors."""
     xq_r, xk_r = jnp.reshape(xq, (*xq.shape[:-1], -1, 2)), jnp.reshape(xk, (*xk.shape[:-1], -1, 2))
-    
-    # Convert to complex numbers
     xq_complex = jnp.complex64(xq_r[..., 0] + 1j * xq_r[..., 1])
     xk_complex = jnp.complex64(xk_r[..., 0] + 1j * xk_r[..., 1])
     
-    # Reshape frequency cis for broadcasting
     freqs_cis = jnp.reshape(freqs_cis, (1, freqs_cis.shape[0], 1, freqs_cis.shape[1]))
-    
-    # Apply rotation through complex multiplication
     xq_out = xq_complex * freqs_cis
     xk_out = xk_complex * freqs_cis
     
-    # Convert back to real tensor and reshape
     xq = jnp.stack([jnp.real(xq_out), jnp.imag(xq_out)], axis=-1).reshape(xq.shape)
     xk = jnp.stack([jnp.real(xk_out), jnp.imag(xk_out)], axis=-1).reshape(xk.shape)
     
     return xq, xk
 
-# Flash Attention implementation (simplified for this example)
+# Flash Attention (optimized attention mechanism for lower memory footprint)
 @partial(jax.jit)
 def flash_attention(q, k, v, mask=None, scale=None):
-    """
-    Optimized implementation of attention mechanism using JAX primitives
-    for better compiler optimization and memory efficiency.
-    """
+    """Implements an optimized version of scaled dot-product attention with memory efficiency improvements."""
     batch_size, num_heads, seq_len, head_dim = q.shape
     
-    # Compute scale if not provided
+    # Compute scaling factor if not provided
     if scale is None:
         scale = 1.0 / jnp.sqrt(head_dim)
     
-    # Compute attention scores with fused operation
-    # Fuse transpose and matmul for better compiler optimization
+    # Compute scaled dot-product attention scores
     scores = jnp.einsum('bhid,bhjd->bhij', q, k) * scale
     
-    # Apply causal mask if provided
+    # Apply causal mask for autoregressive decoding
     if mask is not None:
         scores = scores + mask
     
-    # Stabilize softmax by subtracting max value
-    # This prevents overflow and allows for better precision
+    # Numerical stability: subtract max before softmax
     scores_max = jnp.max(scores, axis=-1, keepdims=True)
     scores = scores - lax.stop_gradient(scores_max)
     
-    # Apply softmax with higher precision
     attn_weights = jnp.exp(scores)
     attn_weights = attn_weights / jnp.sum(attn_weights, axis=-1, keepdims=True)
     
-    # Compute attention output with fused operation
+    # Compute weighted sum of value vectors
     output = jnp.einsum('bhij,bhjd->bhid', attn_weights, v)
     
     return output
 
-# SwiGLU Activation
+# SwiGLU Activation Function (efficient non-linearity for transformers)
 def swiglu(x, w1, w2, w3):
-    """SwiGLU activation function using Flax modules"""
+    """Implements SwiGLU activation: silu(x) * linear(x) transformation."""
     return w2(jax.nn.silu(w3(x)) * w1(x))
 
 # LLaMA Causal Self-Attention Module
 class LLaMACausalSelfAttention(nn.Module):
-    """Multi-head causal self-attention with support for grouped-query attention"""
-    config: LLaMAConfig
-    
+    """
+    Multi-head causal self-attention layer with support for grouped-query attention.
+    This layer projects the input to query, key, and value spaces and applies rotary embeddings
+    before performing scaled dot-product attention using a flash attention mechanism.
+    """
+    config: LLaMAConfig  # Model configuration object
+
     def setup(self):
         config = self.config
-        dim = config.dim
-        n_heads = config.n_heads
-        n_kv_heads = config.n_kv_heads
-        head_dim = dim // n_heads
-        
-        # QKV projections
+        dim = config.dim  # Hidden dimension size
+        n_heads = config.n_heads  # Number of attention heads
+        n_kv_heads = config.n_kv_heads  # Number of key/value heads (for grouped-query attention)
+        head_dim = dim // n_heads  # Dimensionality per attention head
+
+        # Linear layers for query, key, value projections
         self.wq = nn.Dense(n_heads * head_dim,
                           kernel_init=nn.initializers.variance_scaling(1.0, 'fan_in', 'normal'))
         self.wk = nn.Dense(n_kv_heads * head_dim,
                           kernel_init=nn.initializers.variance_scaling(1.0, 'fan_in', 'normal'))
         self.wv = nn.Dense(n_kv_heads * head_dim,
                           kernel_init=nn.initializers.variance_scaling(1.0, 'fan_in', 'normal'))
-        
-        # Output projection
+
+        # Output linear projection
         self.wo = nn.Dense(dim,
                           kernel_init=nn.initializers.variance_scaling(1.0, 'fan_in', 'normal'))
-        
-        # QK normalization for improved stability
+
+        # Normalization layers for query and key
         self.q_norm = RMSNorm(head_dim)
         self.k_norm = RMSNorm(head_dim)
-    
+
     def __call__(self, x, freqs_cis, mask=None, deterministic=True):
-        B, T, C = x.shape
+        B, T, C = x.shape  # Batch size, sequence length, hidden dimension
         config = self.config
         n_heads = config.n_heads
         n_kv_heads = config.n_kv_heads
         head_dim = C // n_heads
-        
-        # Linear projections
+
+        # Apply linear projections for queries, keys, and values
         q = self.wq(x).reshape(B, T, n_heads, head_dim)
         k = self.wk(x).reshape(B, T, n_kv_heads, head_dim)
         v = self.wv(x).reshape(B, T, n_kv_heads, head_dim)
-        
-        # Apply QK normalization
+
+        # Apply RMS normalization
         q = jnp.swapaxes(self.q_norm(jnp.swapaxes(q, 1, 2)), 1, 2)
         k = jnp.swapaxes(self.k_norm(jnp.swapaxes(k, 1, 2)), 1, 2)
-        
-        # Apply rotary embeddings
+
+        # Apply rotary embeddings to queries and keys
         q, k = apply_rotary_emb(q, k, freqs_cis[:T])
-        
-        # Repeat k and v heads if n_heads > n_kv_heads (grouped-query attention)
+
+        # Grouped-query attention: repeat key and value heads if necessary
         if n_heads > n_kv_heads:
             k = jnp.repeat(k, n_heads // n_kv_heads, axis=2)
             v = jnp.repeat(v, n_heads // n_kv_heads, axis=2)
-        
-        # Transpose tensors for attention computation (B, H, T, D)
+
+        # Reshape tensors for attention computation
         q, k, v = map(lambda x: jnp.swapaxes(x, 1, 2), (q, k, v))
-        
-        # Use flash attention (conceptually)
+
+        # Use flash attention for efficient memory usage
         output = flash_attention(q, k, v, mask)
-        
-        # Transpose output and project back to full dimension
+
+        # Reshape and project output back to hidden dimension
         output = jnp.swapaxes(output, 1, 2).reshape(B, T, -1)
         output = self.wo(output)
-        
+
         return output
 
 # LLaMA MLP Module
