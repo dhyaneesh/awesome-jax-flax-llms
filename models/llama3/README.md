@@ -2,39 +2,32 @@
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/your-repo/llama3_in_jax.ipynb)
 
-This repository contains a **JAX/Flax implementation** of the **LLaMA 3** language model. Designed for efficient execution on **TPUs and GPUs**, this implementation utilizes JAX’s **XLA compilation** and **Optax optimizers** for high-performance training.
+This repository contains a **JAX/Flax implementation** of the **LLaMA 3** language model, optimized for execution on **TPUs and GPUs**. The implementation leverages **XLA compilation** and **Optax optimizers** for high-performance training.
 
 ## 🚀 Overview
 
-The `llama3_in_jax.py` script and accompanying notebook provide a modular implementation of **LLaMA 3** using **JAX & Flax**, with a focus on:
+The `llama3_in_jax.py` script provides a modular implementation of **LLaMA 3** using **JAX & Flax**, with key features including:
 
-- **Scalable autoregressive text generation**.
-- **Optimized parallel training** using JAX's **pmap** for **TPUs**.
-- **Advanced optimizations** such as grouped-query attention (GQA) and Rotary Positional Embeddings (RoPE).
+- **Autoregressive text generation** with an optimized decoding process.
+- **Efficient TPU/GPU training** using JAX's `pmap` for parallelism.
+- **Optimized Transformer architecture** with **Grouped-Query Attention (GQA)** and **Rotary Positional Embeddings (RoPE)**.
+- **RMSNorm and SwiGLU activations** for stable training.
 
-## 🧠 Understanding LLaMA 3
+## 🧠 Model Architecture
 
-LLaMA 3 is a **decoder-only transformer model** optimized for efficiency and scalability. Key architectural highlights include:
+LLaMA 3 is a **decoder-only transformer model** designed for efficiency and scalability. Key components include:
 
 - **Multi-head Self-Attention with Grouped-Query Attention (GQA)**: Reduces memory and speeds up inference.
-- **Rotary Positional Embeddings (RoPE)**: Enables longer context lengths with minimal overhead.
-- **SwiGLU Activation Function**: Used in feedforward layers for improved efficiency.
-- **Root Mean Square Normalization (RMSNorm)**: Stabilizes training and replaces LayerNorm.
-
----
-
-📌 **LLaMA 3 Model Architecture:**
-
-![LLaMA 3 Architecture](https://miro.medium.com/v2/resize:fit:4800/format:webp/1*_xNP7aBpcmcMk4tXJ-Z8Mw.png)
-
----
+- **Rotary Positional Embeddings (RoPE)**: Improves long-context performance.
+- **SwiGLU Activation Function**: Enhances non-linearity in feedforward layers.
+- **Root Mean Square Normalization (RMSNorm)**: Replaces LayerNorm for stability.
 
 ## 🛠 Features
 
 ✅ **Pure JAX/Flax Implementation** (No PyTorch dependencies).  
-✅ **Efficient TPU/ GPU Training** via **pmap and vmap**.  
-✅ **Custom Rotary Position Embeddings (RoPE)** implementation.  
-✅ **Grouped-Query Attention (GQA)** for faster inference.  
+✅ **Efficient TPU/GPU Training** via **pmap and vmap**.  
+✅ **Custom Rotary Position Embeddings (RoPE) Implementation**.  
+✅ **Grouped-Query Attention (GQA) for Faster Inference**.  
 ✅ **Optax-based Optimizer with Warmup & Weight Decay**.  
 ✅ **Minimal Dependencies & Hugging Face Dataset Support**.  
 
@@ -44,27 +37,27 @@ LLaMA 3 is a **decoder-only transformer model** optimized for efficiency and sca
 
 The model is implemented with **Flax.linen**, featuring:
 
-- **Custom RMSNorm** for stable training.
-- **Precomputed Rotary Position Embeddings** to speed up inference.
-- **Efficient Self-Attention Layer** with multi-query support.
-- **SwiGLU-based MLP Layers** for enhanced non-linearity.
+- **Custom RMSNorm** for normalization.
+- **Precomputed Rotary Position Embeddings** for improved efficiency.
+- **Multi-head Causal Self-Attention** with Grouped-Query Attention.
+- **SwiGLU-based MLP Layers** for improved expressiveness.
 
 ```python
-class Llama3Attention(nn.Module):
-    """Multi-head attention with RoPE and Grouped-Query Attention."""
-    config: Llama3Config
+class LLaMACausalSelfAttention(nn.Module):
+    """Multi-head causal self-attention with Grouped-Query Attention."""
+    config: LLaMAConfig
     
     def setup(self):
-        self.q_proj = nn.Dense(self.config.hidden_size)
-        self.k_proj = nn.Dense(self.config.kv_dim)
-        self.v_proj = nn.Dense(self.config.kv_dim)
-        self.o_proj = nn.Dense(self.config.hidden_size)
+        self.wq = nn.Dense(self.config.dim)
+        self.wk = nn.Dense(self.config.dim)
+        self.wv = nn.Dense(self.config.dim)
+        self.wo = nn.Dense(self.config.dim)
     
-    def __call__(self, hidden_states, position_ids=None, training=False):
-        q, k, v = self.q_proj(hidden_states), self.k_proj(hidden_states), self.v_proj(hidden_states)
-        q, k = apply_rotary_pos_emb(q, k, self.config.freqs_cos, self.config.freqs_sin, position_ids)
-        output = self.o_proj(q @ k.transpose(-2, -1) @ v)
-        return output
+    def __call__(self, x, freqs_cis, mask=None):
+        q, k, v = self.wq(x), self.wk(x), self.wv(x)
+        q, k = apply_rotary_emb(q, k, freqs_cis)
+        output = flash_attention(q, k, v, mask)
+        return self.wo(output)
 ```
 
 ### 2️⃣ **Training Pipeline**
@@ -72,16 +65,14 @@ class Llama3Attention(nn.Module):
 The model is trained using **Optax optimizers**, featuring:
 
 - **Warmup Cosine Decay Learning Rate Scheduler**.
-- **AdamW with Gradient Clipping** for stable training.
-- **Efficient Loss Computation using Softmax Cross-Entropy**.
+- **AdamW with Gradient Clipping**.
+- **Cross-Entropy Loss Computation for Language Modeling**.
 
 ```python
 optimizer = optax.chain(
-    optax.clip_by_global_norm(config.grad_clip),
+    optax.clip_by_global_norm(1.0),
     optax.adamw(
         learning_rate=lr_schedule,
-        b1=config.beta1,
-        b2=config.beta2,
         weight_decay=config.weight_decay
     )
 )
@@ -92,16 +83,16 @@ optimizer = optax.chain(
 JAX’s **pmap** enables efficient TPU training by distributing computation across multiple devices.
 
 ```python
-@partial(jax.pmap, axis_name='batch')
-def train_step(state, batch, rng_keys):
+@jax.pmap
+def train_step(state, batch):
     def loss_fn(params):
-        logits, loss = state.apply_fn({'params': params}, batch['input_ids'], batch['labels'])
-        return loss, logits
+        logits = state.apply_fn({'params': params}, batch['input_ids'])
+        loss = optax.softmax_cross_entropy_with_integer_labels(logits, batch['labels']).mean()
+        return loss
     
-    (loss, logits), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params)
-    grads = jax.lax.pmean(grads, axis_name='batch')
+    loss, grads = jax.value_and_grad(loss_fn)(state.params)
     new_state = state.apply_gradients(grads=grads)
-    return new_state, {'loss': loss, 'perplexity': jnp.exp(loss)}
+    return new_state, loss
 ```
 
 ## 🏗 Setup & Usage
@@ -116,11 +107,11 @@ pip install jax flax optax datasets transformers
 
 ### **2️⃣ Load a Hugging Face Dataset**
 
-Modify the dataset loading section in the script:
+The script supports **Hugging Face Datasets**:
 
 ```python
-dataset_name = "wikitext"
-dataset = load_dataset(dataset_name)
+from datasets import load_dataset
+dataset = load_dataset("karpathy/tiny_shakespeare", split="train")
 ```
 
 ### **3️⃣ Train the Model**
@@ -131,22 +122,22 @@ Run the script to start training:
 python llama3_in_jax.py
 ```
 
-Or execute the Jupyter notebook step by step in **Google Colab (with TPU runtime)**.
+Or execute the Jupyter notebook in **Google Colab (with TPU runtime)**.
 
 ### **4️⃣ Generate Text**
 
-Run inference using the trained model:
+Use the trained model for inference:
 
 ```python
 prompt = "Once upon a time"
-generated_text = sample_from_model(state, prompt, encode, decode)
-print(generated_text)
+output = model.generate(input_ids, max_new_tokens=50, rng_key=rng_key)
+print(output)
 ```
 
 ## 📖 Next Steps
 
 - ✅ **Fine-tuning Support** for custom datasets.
-- ✅ **Faster Inference with XLA Compilation**.
+- ✅ **Optimized Inference with XLA Compilation**.
 - ✅ **Experiment with Different Tokenization Methods**.
 
 ## 📜 License
