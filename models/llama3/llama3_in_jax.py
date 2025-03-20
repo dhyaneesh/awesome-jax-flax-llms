@@ -91,21 +91,37 @@ def apply_rotary_emb(xq, xk, freqs_cis):
     return xq, xk
 
 # Flash Attention implementation (simplified for this example)
-def flash_attention(q, k, v, mask=None):
-    """Efficient attention implementation (conceptual - not actual Flash Attention)"""
+@partial(jax.jit)
+def flash_attention(q, k, v, mask=None, scale=None):
+    """
+    Optimized implementation of attention mechanism using JAX primitives
+    for better compiler optimization and memory efficiency.
+    """
     batch_size, num_heads, seq_len, head_dim = q.shape
     
-    # Scaled dot-product attention
-    scale = 1.0 / math.sqrt(head_dim)
-    scores = jnp.matmul(q, jnp.swapaxes(k, -1, -2)) * scale
+    # Compute scale if not provided
+    if scale is None:
+        scale = 1.0 / jnp.sqrt(head_dim)
     
-    # Apply mask if provided
+    # Compute attention scores with fused operation
+    # Fuse transpose and matmul for better compiler optimization
+    scores = jnp.einsum('bhid,bhjd->bhij', q, k) * scale
+    
+    # Apply causal mask if provided
     if mask is not None:
         scores = scores + mask
     
-    # Apply softmax and compute weighted sum
-    attn_weights = jax.nn.softmax(scores, axis=-1)
-    output = jnp.matmul(attn_weights, v)
+    # Stabilize softmax by subtracting max value
+    # This prevents overflow and allows for better precision
+    scores_max = jnp.max(scores, axis=-1, keepdims=True)
+    scores = scores - lax.stop_gradient(scores_max)
+    
+    # Apply softmax with higher precision
+    attn_weights = jnp.exp(scores)
+    attn_weights = attn_weights / jnp.sum(attn_weights, axis=-1, keepdims=True)
+    
+    # Compute attention output with fused operation
+    output = jnp.einsum('bhij,bhjd->bhid', attn_weights, v)
     
     return output
 
