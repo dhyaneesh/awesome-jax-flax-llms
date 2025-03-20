@@ -769,6 +769,9 @@ def generate_text(model, params, tokenizer, prompt, max_new_tokens=100, temperat
 if __name__ == "__main__":
     # Create configuration
     config = LLaMAConfig()
+    # Create checkpoint directory with absolute path
+    checkpoint_dir = os.path.abspath("llama_checkpoints")
+    os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Train the model
     final_state = train_llama(config, num_epochs=5, steps_per_epoch=1000)
