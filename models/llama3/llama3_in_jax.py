@@ -11,6 +11,7 @@ from tqdm import tqdm
 from datasets import load_dataset
 from tokenizers import SentencePieceUnigramTokenizer
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from flax.training import train_state, checkpoints
 
 # Check for TPU and set environment
 os.environ['JAX_PLATFORM_NAME'] = 'tpu'
@@ -110,8 +111,8 @@ def flash_attention(q, k, v, mask=None):
 
 # SwiGLU Activation
 def swiglu(x, w1, w2, w3):
-    """SwiGLU activation function"""
-    return jnp.dot(jax.nn.silu(jnp.dot(x, w3)) * jnp.dot(x, w1), w2)
+    """SwiGLU activation function using Flax modules"""
+    return w2(jax.nn.silu(w3(x)) * w1(x))
 
 # LLaMA Causal Self-Attention Module
 class LLaMACausalSelfAttention(nn.Module):
@@ -195,9 +196,7 @@ class LLaMAMLP(nn.Module):
                          kernel_init=nn.initializers.variance_scaling(1.0, 'fan_in', 'normal'))
     
     def __call__(self, x):
-        return swiglu(x, self.w1.variables['params']['kernel'], 
-                     self.w2.variables['params']['kernel'], 
-                     self.w3.variables['params']['kernel'])
+        return swiglu(x, self.w1, self.w2, self.w3)
 
 # LLaMA Transformer Block
 class LLaMABlock(nn.Module):
@@ -338,87 +337,103 @@ class LLaMA3(nn.Module):
         
         return output
 
-# Training State
-class LLaMATrainState:
-    """Custom training state for LLaMA model"""
-    params: Dict
-    opt_state: optax.OptState
-    step: int
+# Create initial training state with Flax TrainState
+def create_train_state(model, config, rng_key):
+    """Create initial training state."""
+    # Initialize model parameters
+    init_params = model.init(rng_key, jnp.ones((1, 1), dtype=jnp.int32))
     
-    @classmethod
-    def create(cls, model, config, rng_key):
-        """Initialize a new training state"""
-        params = model.init(rng_key, jnp.ones((1, 1), dtype=jnp.int32))
-        
-        # Create optimizer with learning rate schedule
-        lr_schedule = optax.warmup_cosine_decay_schedule(
-            init_value=0.0,
-            peak_value=config.learning_rate,
-            warmup_steps=config.warmup_steps,
-            decay_steps=config.max_steps,
-            end_value=config.learning_rate * 0.1
-        )
-        
-        # AdamW optimizer with gradient clipping
-        optimizer = optax.chain(
-            optax.clip_by_global_norm(1.0),
-            optax.adamw(
-                learning_rate=lr_schedule,
-                b1=0.9,
-                b2=0.95,
-                eps=1e-8,
-                weight_decay=config.weight_decay
-            )
-        )
-        
-        opt_state = optimizer.init(params)
-        
-        return cls(
-            params=params,
-            opt_state=opt_state,
-            step=0
-        )
+    # Create learning rate schedule
+    lr_schedule = optax.warmup_cosine_decay_schedule(
+        init_value=0.0,
+        peak_value=config.learning_rate,
+        warmup_steps=config.warmup_steps,
+        decay_steps=config.max_steps,
+        end_value=config.learning_rate * 0.1
+    )
     
-    def save(self, filepath):
-        """Save training state to disk"""
-        # Convert jax arrays to numpy for pickling
-        numpy_state = jax.tree_map(lambda x: x.copy() if hasattr(x, 'copy') else x, self)
-        with open(filepath, 'wb') as f:
-            pickle.dump(numpy_state, f)
+    # Create optimizer
+    optimizer = optax.chain(
+        optax.clip_by_global_norm(1.0),
+        optax.adamw(
+            learning_rate=lr_schedule,
+            b1=0.9,
+            b2=0.95,
+            eps=1e-8,
+            weight_decay=config.weight_decay
+        )
+    )
     
-    @classmethod
-    def load(cls, filepath):
-        """Load training state from disk"""
-        with open(filepath, 'rb') as f:
-            numpy_state = pickle.load(f)
-        # Convert numpy arrays back to jax arrays
-        state = jax.tree_map(lambda x: jnp.array(x) if hasattr(x, 'shape') else x, numpy_state)
-        return state
+    # Create and return train state - ensure parameters have consistent structure
+    return train_state.TrainState.create(
+        apply_fn=model.apply,
+        params=init_params,
+        tx=optimizer
+    )
 
 # Data preparation functions
 def prepare_datasets(config):
     """Load and prepare datasets"""
     # Load datasets
-    wiki_dataset = load_dataset("wikitext", "wikitext-103-v1", split="train")
+    wiki_dataset = load_dataset("karpathy/tiny_shakespeare", split="train")
+    
+    # Print the dataset structure to understand its format
+    print("Dataset structure:", list(wiki_dataset.features.keys()))
+    print("First example:", wiki_dataset[0])
     
     # Initialize tokenizer
     tokenizer = SentencePieceUnigramTokenizer()
     
-    # Train tokenizer if needed (simplified for this example)
-    # In practice, you'd want to use a pre-trained tokenizer
+    # Train the tokenizer
+    # First check what columns are actually available
+    column_names = list(wiki_dataset.features.keys())
+    text_column = "text" if "text" in column_names else column_names[0]
+    
+    # Get a sample of texts for training the tokenizer
+    # (for efficiency, we don't need to use the entire dataset)
+    sample_texts = [
+        example[text_column] for example in wiki_dataset.select(range(min(10000, len(wiki_dataset))))
+        if isinstance(example[text_column], str) and example[text_column].strip()
+    ]
+    
+    # Train the tokenizer
+    tokenizer.train_from_iterator(
+        sample_texts,
+        vocab_size=config.vocab_size,
+        special_tokens=["<pad>", "<unk>", "<bos>", "<eos>"],
+    )
+    
+    # Save the tokenizer for later use
+    tokenizer.save("llama_tokenizer.json")
     
     def tokenize_function(example):
-        tokens = tokenizer.encode(example["text"]).ids
-        return {"input_ids": tokens}
+        # Make sure we're accessing the right column
+        text = example[text_column]
+        if isinstance(text, str) and text.strip():
+            tokens = tokenizer.encode(text).ids
+            return {"input_ids": tokens}
+        return {"input_ids": []}
     
     # Tokenize dataset
     tokenized_dataset = wiki_dataset.map(
         tokenize_function,
-        remove_columns=["text"],
-        batched=True
+        remove_columns=column_names,  # Remove all original columns
+        batched=False  # Process one example at a time for better error handling
     )
     
-    return tokenized_dataset, tokenizer
+    # Filter out empty examples
+    tokenized_dataset = tokenized_dataset.filter(lambda x: len(x["input_ids"]) > 0)
+    
+    # Convert to a format suitable for training
+    # Flatten all token sequences into one long sequence
+    all_tokens = []
+    for example in tokenized_dataset:
+        all_tokens.extend(example["input_ids"])
+    
+    # Create a single "dataset" with just input_ids for easier slicing during training
+    flattened_dataset = {"input_ids": all_tokens}
+    
+    return flattened_dataset, tokenizer
 
 def get_batch(key, data, config):
     """Create a batch of data for training"""
@@ -426,12 +441,18 @@ def get_batch(key, data, config):
     seq_len = config.max_seq_len
     
     # Generate random starting indices
-    total_tokens = len(data["input_ids"])
-    ix = random.randint(key, (batch_size,), 0, total_tokens - seq_len)
+    total_tokens = len(data["input_ids"]) - seq_len - 1  # -1 for target shifting
     
-    # Vectorized operation to get input and target sequences
-    x = vmap(lambda i: lax.dynamic_slice(jnp.array(data["input_ids"]), (i,), (seq_len,)))(ix)
-    y = vmap(lambda i: lax.dynamic_slice(jnp.array(data["input_ids"]), (i + 1,), (seq_len,)))(ix)
+    # Make sure we have enough tokens
+    if total_tokens <= 0:
+        raise ValueError(f"Not enough tokens in dataset. Found {len(data['input_ids'])}, need at least {seq_len + 2}")
+    
+    # Generate batch_size random starting points
+    ix = random.randint(key, (batch_size,), 0, total_tokens)
+    
+    # Create input and target sequences
+    x = jnp.stack([jnp.array(data["input_ids"][i:i+seq_len]) for i in ix])
+    y = jnp.stack([jnp.array(data["input_ids"][i+1:i+seq_len+1]) for i in ix])
     
     return x, y
 
@@ -451,77 +472,92 @@ def initialize_tpu():
     
     return n_devices
 
-def replicate_state_on_devices(state, n_devices):
-    """Replicate training state across devices for pmap"""
-    return jax.device_put_replicated(state, jax.local_devices()[:n_devices])
-
-def step_device_rng_keys(rng, n_devices):
-    """Create RNG keys for each device"""
+# FIXED: Improved RNG key handling for multi-device setup
+def create_device_rng_keys(rng, n_devices):
+    """Create RNG keys for each device with proper shape for pmap"""
+    # Split the key into n_devices + 1 keys
     keys = random.split(rng, n_devices + 1)
+    # Return the next key and the device keys reshaped for pmap
     return keys[0], keys[1:]
 
 # Training functions
-def compute_loss(params, model, batch, rng_key):
-    """Compute loss for a batch of data"""
+def train_step(state, batch, dropout_rng):
+    """Single training step"""
     inputs, targets = batch
     
-    # Forward pass
-    logits = model.apply(params, inputs, deterministic=False, rngs={'dropout': rng_key})
+    # Define loss function
+    def loss_fn(params):
+        # Apply model with correct parameter structure
+        logits = state.apply_fn({"params": params}, inputs, deterministic=False, rngs={'dropout': dropout_rng})
+        
+        # Reshape for cross entropy
+        logits = logits.reshape(-1, logits.shape[-1])
+        targets_flat = targets.reshape(-1)
+        
+        # Compute cross entropy loss
+        loss = optax.softmax_cross_entropy_with_integer_labels(
+            logits, targets_flat
+        ).mean()
+        
+        return loss
     
-    # Reshape for cross entropy
-    logits = logits.reshape(-1, logits.shape[-1])
-    targets = targets.reshape(-1)
+    # Get gradients - make sure we're getting gradients for the actual parameters
+    grad_fn = jax.value_and_grad(loss_fn)
     
-    # Compute cross entropy loss
-    loss = -jnp.mean(
-        jnp.take_along_axis(
-            jax.nn.log_softmax(logits),
-            targets[:, None],
-            axis=1
-        )
-    )
+    # Check param structure and extract the inner params if needed
+    if "params" in state.params:
+        actual_params = state.params["params"]
+    else:
+        actual_params = state.params
     
-    return loss
-
-def train_step(state, model, batch, rng_key, optimizer):
-    """Single training step"""
-    # Get gradient function
-    loss_fn = lambda p: compute_loss(p, model, batch, rng_key)
-    loss, grads = jax.value_and_grad(loss_fn)(state.params)
+    loss, grads = grad_fn(actual_params)
     
-    # Apply gradients
-    updates, new_opt_state = optimizer.update(grads, state.opt_state, state.params)
-    new_params = optax.apply_updates(state.params, updates)
+    # Now wrap the gradients in the same structure as state.params for apply_gradients
+    if "params" in state.params:
+        wrapped_grads = {"params": grads}
+    else:
+        wrapped_grads = grads
     
-    # Update state
-    new_state = LLaMATrainState(
-        params=new_params,
-        opt_state=new_opt_state,
-        step=state.step + 1
-    )
+    # Update state with correctly structured gradients
+    new_state = state.apply_gradients(grads=wrapped_grads)
     
     return new_state, loss
 
 # JIT-compiled training step for efficiency
-train_step_jit = jax.jit(train_step, static_argnums=(1, 4))
+train_step_jit = jax.jit(train_step)
 
-# pmapped training step for multi-device training
-def train_step_pmap(state, model, batch, rng_keys, optimizer):
-    """Training step for pmap (parallel execution)"""
-    return jax.pmap(
-        lambda s, b, k: train_step(s, model, b, k, optimizer),
-        axis_name='batch'
-    )(state, batch, rng_keys)
+# FIXED: Define pmapped training step with improved dropout RNG handling
+def train_step_pmap_wrapper(state, batch, dropout_rng):
+    # Wrapper for consistency when pmapping
+    return train_step(state, batch, dropout_rng)
 
-def evaluate(params, model, eval_data, config, num_batches=50):
+train_step_pmap = jax.pmap(train_step_pmap_wrapper, axis_name='batch')
+
+def evaluate(model_apply_fn, params, eval_data, config, num_batches=50):
     """Evaluate model on validation data"""
     key = random.PRNGKey(42)
     total_loss = 0.0
     
     for i in range(num_batches):
         key, batch_key = random.split(key)
-        batch = get_batch(batch_key, eval_data, config)
-        loss = compute_loss(params, model, batch, random.PRNGKey(0))
+        inputs, targets = get_batch(batch_key, eval_data, config)
+        
+        # Forward pass
+        # Check if params already has a 'params' key
+        if 'params' in params:
+            logits = model_apply_fn(params, inputs, deterministic=True)
+        else:
+            logits = model_apply_fn({'params': params}, inputs, deterministic=True)
+        
+        # Reshape for cross entropy
+        logits = logits.reshape(-1, logits.shape[-1])
+        targets = targets.reshape(-1)
+        
+        # Compute cross entropy loss
+        loss = optax.softmax_cross_entropy_with_integer_labels(
+            logits, targets
+        ).mean()
+        
         total_loss += loss
     
     avg_loss = total_loss / num_batches
@@ -529,7 +565,7 @@ def evaluate(params, model, eval_data, config, num_batches=50):
     
     return avg_loss, perplexity
 
-# Main training function
+# FIXED: Main training function with corrected multi-device support
 def train_llama(config, num_epochs=5, steps_per_epoch=1000, save_every=1000):
     """Train LLaMA model"""
     # Initialize TPU
@@ -540,34 +576,18 @@ def train_llama(config, num_epochs=5, steps_per_epoch=1000, save_every=1000):
     rng_key = random.PRNGKey(42)
     
     # Create training state
-    state = LLaMATrainState.create(model, config, rng_key)
+    state = create_train_state(model, config, rng_key)
     
-    # Create optimizer
-    lr_schedule = optax.warmup_cosine_decay_schedule(
-        init_value=0.0,
-        peak_value=config.learning_rate,
-        warmup_steps=config.warmup_steps,
-        decay_steps=config.max_steps,
-        end_value=config.learning_rate * 0.1
-    )
-    
-    optimizer = optax.chain(
-        optax.clip_by_global_norm(1.0),
-        optax.adamw(
-            learning_rate=lr_schedule,
-            b1=0.9,
-            b2=0.95,
-            eps=1e-8,
-            weight_decay=config.weight_decay
-        )
-    )
+    # FIXED: Replicate the state across devices for multi-device training
+    if n_devices > 1:
+        state = jax.device_put_replicated(state, jax.devices())
     
     # Prepare datasets
     train_dataset, tokenizer = prepare_datasets(config)
     
-    # Set up for multi-device training if available
-    if n_devices > 1:
-        state = replicate_state_on_devices(state, n_devices)
+    # Create checkpoint directory
+    checkpoint_dir = "llama_checkpoints"
+    os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Training loop
     rng_key = random.PRNGKey(0)
@@ -582,19 +602,37 @@ def train_llama(config, num_epochs=5, steps_per_epoch=1000, save_every=1000):
         for step_in_epoch in tqdm(range(steps_per_epoch), desc=f"Epoch {epoch+1}/{num_epochs}"):
             # Get a batch of data
             rng_key, batch_key = random.split(rng_key)
-            batch = get_batch(batch_key, train_dataset, config)
+            batch_data = get_batch(batch_key, train_dataset, config)
             
             # Training step
             if n_devices > 1:
-                # Multi-device training
-                rng_key, dropout_keys = step_device_rng_keys(rng_key, n_devices)
-                state, loss = train_step_pmap(state, model, batch, dropout_keys, optimizer)
+                # FIXED: Properly shard the batch across devices
+                # Calculate per-device batch size
+                per_device_batch = config.batch_size // n_devices
+                if per_device_batch == 0:
+                    raise ValueError(f"Batch size {config.batch_size} is too small for {n_devices} devices")
+                
+                # Reshape batch data for multi-device training
+                inputs, targets = batch_data
+                
+                # FIXED: Reshape to (n_devices, per_device_batch, seq_len)
+                inputs = inputs.reshape((n_devices, per_device_batch, inputs.shape[1]))
+                targets = targets.reshape((n_devices, per_device_batch, targets.shape[1]))
+                
+                batch_data = (inputs, targets)
+                
+                # FIXED: Create per-device RNG keys with proper shape for pmap
+                rng_key, dropout_keys = create_device_rng_keys(rng_key, n_devices)
+                
+                # Apply pmapped training step
+                state, loss = train_step_pmap(state, batch_data, dropout_keys)
+                
                 # Average loss across devices
                 loss = jnp.mean(loss)
             else:
                 # Single device training
                 rng_key, dropout_key = random.split(rng_key)
-                state, loss = train_step_jit(state, model, batch, dropout_key, optimizer)
+                state, loss = train_step_jit(state, batch_data, dropout_key)
             
             epoch_loss += loss
             step += 1
@@ -611,29 +649,48 @@ def train_llama(config, num_epochs=5, steps_per_epoch=1000, save_every=1000):
                 else:
                     save_state = state
                 
-                save_state.save(f"llama_checkpoint_step_{step}.pkl")
+                # Save checkpoint using Flax's checkpoints utility
+                checkpoints.save_checkpoint(
+                    ckpt_dir=checkpoint_dir,
+                    target=save_state,
+                    step=step,
+                    overwrite=True
+                )
                 
+                # Generate sample text
                 # Generate sample text
                 if n_devices > 1:
                     sample_params = jax.tree_map(lambda x: x[0], state.params)
                 else:
                     sample_params = state.params
-                
+
                 prompt = tokenizer.encode("Once upon a time").ids
                 prompt_tensor = jnp.array([prompt])
-                
+
                 sample_rng = random.PRNGKey(step)
-                generated = model.apply(
-                    {"params": sample_params},
-                    prompt_tensor,
-                    max_new_tokens=50,
-                    rng_key=sample_rng,
-                    temperature=config.temperature,
-                    top_k=config.top_k,
-                    top_p=config.top_p,
-                    method=model.generate
-                )
-                
+                # Check if sample_params already has a 'params' key
+                if 'params' in sample_params:
+                    generated = model.apply(
+                        sample_params,
+                        prompt_tensor,
+                        max_new_tokens=50,
+                        rng_key=sample_rng,
+                        temperature=config.temperature,
+                        top_k=config.top_k,
+                        top_p=config.top_p,
+                        method=model.generate
+                    )
+                else:
+                    generated = model.apply(
+                        {"params": sample_params},
+                        prompt_tensor,
+                        max_new_tokens=50,
+                        rng_key=sample_rng,
+                        temperature=config.temperature,
+                        top_k=config.top_k,
+                        top_p=config.top_p,
+                        method=model.generate
+                    )                
                 generated_text = tokenizer.decode(generated[0].tolist())
                 print(f"\nSample generation at step {step}:\n{generated_text}\n")
         
@@ -648,7 +705,7 @@ def train_llama(config, num_epochs=5, steps_per_epoch=1000, save_every=1000):
             eval_params = state.params
         
         # Validation loss and perplexity
-        val_loss, perplexity = evaluate(eval_params, model, train_dataset, config)
+        val_loss, perplexity = evaluate(model.apply, eval_params, train_dataset, config)
         print(f"Validation Loss: {val_loss:.4f}, Perplexity: {perplexity:.2f}")
     
     # Save final model
@@ -657,7 +714,13 @@ def train_llama(config, num_epochs=5, steps_per_epoch=1000, save_every=1000):
     else:
         final_state = state
     
-    final_state.save("llama_final_model.pkl")
+    checkpoints.save_checkpoint(
+        ckpt_dir=checkpoint_dir,
+        target=final_state,
+        step=total_steps,
+        prefix="llama_final_",
+        overwrite=True
+    )
     print("Training complete. Final model saved.")
     
     return final_state
@@ -665,23 +728,42 @@ def train_llama(config, num_epochs=5, steps_per_epoch=1000, save_every=1000):
 # Text generation function
 def generate_text(model, params, tokenizer, prompt, max_new_tokens=100, temperature=0.8):
     """Generate text from a prompt"""
+    # Ensure prompt is a string
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+        
     prompt_tokens = tokenizer.encode(prompt).ids
     prompt_tensor = jnp.array([prompt_tokens])
     
     rng_key = random.PRNGKey(0)
-    generated = model.apply(
-        {"params": params},
-        prompt_tensor,
-        max_new_tokens=max_new_tokens,
-        rng_key=rng_key,
-        temperature=temperature,
-        top_k=40,
-        top_p=0.95,
-        method=model.generate
-    )
+    # Check if params already has a 'params' key
+    if 'params' in params:
+        generated = model.apply(
+            params,
+            prompt_tensor,
+            max_new_tokens=max_new_tokens,
+            rng_key=rng_key,
+            temperature=temperature,
+            top_k=40,
+            top_p=0.95,
+            method=model.generate
+        )
+    else:
+        generated = model.apply(
+            {"params": params},
+            prompt_tensor,
+            max_new_tokens=max_new_tokens,
+            rng_key=rng_key,
+            temperature=temperature,
+            top_k=40,
+            top_p=0.95,
+            method=model.generate
+        )
     
+    # Convert jnp array to Python list before decoding
     generated_text = tokenizer.decode(generated[0].tolist())
     return generated_text
+
 
 # Main entry point
 if __name__ == "__main__":
