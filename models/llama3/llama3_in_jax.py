@@ -831,7 +831,7 @@ if __name__ == "__main__":
     os.makedirs(checkpoint_dir, exist_ok=True)
 
     # Train the model
-    final_state = train_llama(config, num_epochs=5, steps_per_epoch=1000)
+    final_state = train_llama(config, num_epochs=5, steps_per_epoch=10,save_every= 10)
 
     # Generate some text
     model = LLaMA3(config)
