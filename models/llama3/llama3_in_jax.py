@@ -11,45 +11,47 @@ from tqdm import tqdm
 from datasets import load_dataset
 from tokenizers import SentencePieceUnigramTokenizer
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from flax.training import train_state, checkpoints
+from flax.training import train_state, orbax_utils
+import orbax.checkpoint as ocp
 
-# Configure JAX to utilize TPU acceleration when available.
+
+# Check for TPU and set environment
 os.environ['JAX_PLATFORM_NAME'] = 'tpu'
 os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'
 print("JAX devices:", jax.devices())
 
-# Model hyperparameters and configuration
+# Model Configuration
 class LLaMAConfig:
-    """Configuration for the LLaMA model, including architectural and training parameters."""
-    vocab_size: int = 32000  # Vocabulary size for tokenization.
-    dim: int = 512  # Hidden dimensionality of transformer layers.
-    n_layers: int = 8  # Number of stacked transformer blocks.
-    n_heads: int = 8  # Number of self-attention heads per layer.
-    n_kv_heads: int = 4  # Number of heads for key/value projection (for grouped-query attention optimization).
-    max_seq_len: int = 2048  # Maximum supported sequence length for model inputs.
-    dropout_rate: float = 0.0  # Dropout rate applied to various layers.
-    
-    # RoPE (Rotary Position Embedding) parameters
-    rope_theta: float = 10000.0  # Base for computing rotary positional embeddings.
-    
-    # Training parameters
-    batch_size: int = 32  # Training batch size.
-    learning_rate: float = 3e-4  # Initial learning rate.
-    weight_decay: float = 0.1  # L2 weight regularization coefficient.
-    warmup_steps: int = 1000  # Number of warmup steps for learning rate schedule.
-    max_steps: int = 100000  # Total number of training steps.
-    
-    # Generation parameters
-    temperature: float = 0.8  # Temperature scaling for token sampling.
-    top_k: int = 40  # Top-k filtering for token selection.
-    top_p: float = 0.95  # Nucleus sampling probability threshold.
+    """Configuration for LLaMA model"""
+    vocab_size: int = 32000
+    dim: int = 512  # Hidden dimension
+    n_layers: int = 8  # Number of transformer layers
+    n_heads: int = 8  # Number of attention heads
+    n_kv_heads: int = 4  # Number of key/value heads (for grouped-query attention)
+    max_seq_len: int = 2048  # Maximum sequence length
+    dropout_rate: float = 0.0  # Dropout rate
 
-# Root Mean Square Normalization layer (alternative to LayerNorm)
+    # RoPE settings
+    rope_theta: float = 10000.0  # Base for rotary embeddings
+
+    # Training settings
+    batch_size: int = 32
+    learning_rate: float = 3e-4
+    weight_decay: float = 0.1
+    warmup_steps: int = 1000
+    max_steps: int = 100000
+
+    # Generation settings
+    temperature: float = 0.8
+    top_k: int = 40
+    top_p: float = 0.95
+
+# RMS Normalization Layer
 class RMSNorm(nn.Module):
-    """RMS normalization scales activations using root-mean-square statistics."""
-    dim: int  # Dimensionality of input tensors.
-    eps: float = 1e-5  # Small constant to prevent division by zero.
-    
+    """Root Mean Square Layer Normalization"""
+    dim: int
+    eps: float = 1e-5
+
     @nn.compact
     def __call__(self, x):
         weight = self.param('weight', nn.initializers.ones, (self.dim,))
@@ -57,83 +59,91 @@ class RMSNorm(nn.Module):
         x = x * jnp.reciprocal(jnp.sqrt(variance + self.eps))
         return x * weight
 
-# Precompute frequency-based complex exponential embeddings for RoPE (Rotary Position Embeddings)
+# Rotary Position Embeddings
 def precompute_freqs_cis(dim: int, max_seq_len: int, theta: float = 10000.0):
-    """Computes the rotation matrix for rotary embeddings in the frequency domain."""
-    # Compute frequency bands inversely proportional to the RoPE base.
+    """Precompute the frequency tensor for complex exponentials (rotary embeddings)."""
+    # Compute the frequencies for each feature dimension
     freqs = 1.0 / (theta ** (jnp.arange(0, dim // 2, dtype=jnp.float32) / dim))
     t = jnp.arange(max_seq_len, dtype=jnp.float32)
-    # Construct a complex-valued rotation matrix
+    # Create the frequency matrix by outer product
     freqs = jnp.outer(t, freqs)
+    # Convert to complex exponentials
     return jnp.complex64(jnp.exp(1j * freqs))
 
-# Apply precomputed rotary position embeddings to query and key projections
 def apply_rotary_emb(xq, xk, freqs_cis):
-    """Applies precomputed rotary position embeddings to input query and key tensors."""
+    """Apply rotary embeddings to the query and key tensors."""
+    # Reshape inputs to isolate the last dimension into pairs for complex multiplication
     xq_r, xk_r = jnp.reshape(xq, (*xq.shape[:-1], -1, 2)), jnp.reshape(xk, (*xk.shape[:-1], -1, 2))
+
+    # Convert to complex numbers
     xq_complex = jnp.complex64(xq_r[..., 0] + 1j * xq_r[..., 1])
     xk_complex = jnp.complex64(xk_r[..., 0] + 1j * xk_r[..., 1])
-    
+
+    # Reshape frequency cis for broadcasting
     freqs_cis = jnp.reshape(freqs_cis, (1, freqs_cis.shape[0], 1, freqs_cis.shape[1]))
+
+    # Apply rotation through complex multiplication
     xq_out = xq_complex * freqs_cis
     xk_out = xk_complex * freqs_cis
-    
+
+    # Convert back to real tensor and reshape
     xq = jnp.stack([jnp.real(xq_out), jnp.imag(xq_out)], axis=-1).reshape(xq.shape)
     xk = jnp.stack([jnp.real(xk_out), jnp.imag(xk_out)], axis=-1).reshape(xk.shape)
-    
+
     return xq, xk
 
-# Flash Attention (optimized attention mechanism for lower memory footprint)
 @partial(jax.jit)
 def flash_attention(q, k, v, mask=None, scale=None):
-    """Implements an optimized version of scaled dot-product attention with memory efficiency improvements."""
+    """
+    Optimized implementation of attention mechanism using JAX primitives
+    for better compiler optimization and memory efficiency.
+    """
     batch_size, num_heads, seq_len, head_dim = q.shape
-    
-    # Compute scaling factor if not provided
+
+    # Compute scale if not provided
     if scale is None:
         scale = 1.0 / jnp.sqrt(head_dim)
-    
-    # Compute scaled dot-product attention scores
+
+    # Compute attention scores with fused operation
+    # Fuse transpose and matmul for better compiler optimization
     scores = jnp.einsum('bhid,bhjd->bhij', q, k) * scale
-    
-    # Apply causal mask for autoregressive decoding
+
+    # Apply causal mask if provided
     if mask is not None:
         scores = scores + mask
-    
-    # Numerical stability: subtract max before softmax
+
+    # Stabilize softmax by subtracting max value
+    # This prevents overflow and allows for better precision
     scores_max = jnp.max(scores, axis=-1, keepdims=True)
     scores = scores - lax.stop_gradient(scores_max)
-    
+
+    # Apply softmax with higher precision
     attn_weights = jnp.exp(scores)
     attn_weights = attn_weights / jnp.sum(attn_weights, axis=-1, keepdims=True)
-    
-    # Compute weighted sum of value vectors
+
+    # Compute attention output with fused operation
     output = jnp.einsum('bhij,bhjd->bhid', attn_weights, v)
-    
+
     return output
 
-# SwiGLU Activation Function (efficient non-linearity for transformers)
+# SwiGLU Activation
 def swiglu(x, w1, w2, w3):
-    """Implements SwiGLU activation: silu(x) * linear(x) transformation."""
+    """SwiGLU activation function using Flax modules"""
     return w2(jax.nn.silu(w3(x)) * w1(x))
 
 # LLaMA Causal Self-Attention Module
 class LLaMACausalSelfAttention(nn.Module):
-    """
-    Multi-head causal self-attention layer with support for grouped-query attention.
-    This layer projects the input to query, key, and value spaces and applies rotary embeddings
-    before performing scaled dot-product attention using a flash attention mechanism.
-    """
-    config: LLaMAConfig  # Model configuration object
+    """Multi-head causal self-attention with support for grouped-query attention"""
+    config: LLaMAConfig
 
     def setup(self):
         config = self.config
-        dim = config.dim  # Hidden dimension size
-        n_heads = config.n_heads  # Number of attention heads
-        n_kv_heads = config.n_kv_heads  # Number of key/value heads (for grouped-query attention)
-        head_dim = dim // n_heads  # Dimensionality per attention head
+        dim = config.dim
+        n_heads = config.n_heads
+        n_kv_heads = config.n_kv_heads
+        head_dim = dim // n_heads
 
-        # Linear layers for query, key, value projections
+        # QKV projections
         self.wq = nn.Dense(n_heads * head_dim,
                           kernel_init=nn.initializers.variance_scaling(1.0, 'fan_in', 'normal'))
         self.wk = nn.Dense(n_kv_heads * head_dim,
@@ -141,45 +151,45 @@ class LLaMACausalSelfAttention(nn.Module):
         self.wv = nn.Dense(n_kv_heads * head_dim,
                           kernel_init=nn.initializers.variance_scaling(1.0, 'fan_in', 'normal'))
 
-        # Output linear projection
+        # Output projection
         self.wo = nn.Dense(dim,
                           kernel_init=nn.initializers.variance_scaling(1.0, 'fan_in', 'normal'))
 
-        # Normalization layers for query and key
+        # QK normalization for improved stability
         self.q_norm = RMSNorm(head_dim)
         self.k_norm = RMSNorm(head_dim)
 
     def __call__(self, x, freqs_cis, mask=None, deterministic=True):
-        B, T, C = x.shape  # Batch size, sequence length, hidden dimension
+        B, T, C = x.shape
         config = self.config
         n_heads = config.n_heads
         n_kv_heads = config.n_kv_heads
         head_dim = C // n_heads
 
-        # Apply linear projections for queries, keys, and values
+        # Linear projections
         q = self.wq(x).reshape(B, T, n_heads, head_dim)
         k = self.wk(x).reshape(B, T, n_kv_heads, head_dim)
         v = self.wv(x).reshape(B, T, n_kv_heads, head_dim)
 
-        # Apply RMS normalization
+        # Apply QK normalization
         q = jnp.swapaxes(self.q_norm(jnp.swapaxes(q, 1, 2)), 1, 2)
         k = jnp.swapaxes(self.k_norm(jnp.swapaxes(k, 1, 2)), 1, 2)
 
-        # Apply rotary embeddings to queries and keys
+        # Apply rotary embeddings
         q, k = apply_rotary_emb(q, k, freqs_cis[:T])
 
-        # Grouped-query attention: repeat key and value heads if necessary
+        # Repeat k and v heads if n_heads > n_kv_heads (grouped-query attention)
         if n_heads > n_kv_heads:
             k = jnp.repeat(k, n_heads // n_kv_heads, axis=2)
             v = jnp.repeat(v, n_heads // n_kv_heads, axis=2)
 
-        # Reshape tensors for attention computation
+        # Transpose tensors for attention computation (B, H, T, D)
         q, k, v = map(lambda x: jnp.swapaxes(x, 1, 2), (q, k, v))
 
-        # Use flash attention for efficient memory usage
+        # Use flash attention (conceptually)
         output = flash_attention(q, k, v, mask)
 
-        # Reshape and project output back to hidden dimension
+        # Transpose output and project back to full dimension
         output = jnp.swapaxes(output, 1, 2).reshape(B, T, -1)
         output = self.wo(output)
 
@@ -189,11 +199,11 @@ class LLaMACausalSelfAttention(nn.Module):
 class LLaMAMLP(nn.Module):
     """Feed-forward network with SwiGLU activation"""
     config: LLaMAConfig
-    
+
     def setup(self):
         dim = self.config.dim
         hidden_dim = 4 * dim  # 4x expansion
-        
+
         # Linear projections
         self.w1 = nn.Dense(hidden_dim,
                          kernel_init=nn.initializers.variance_scaling(1.0, 'fan_in', 'normal'))
@@ -201,7 +211,7 @@ class LLaMAMLP(nn.Module):
                          kernel_init=nn.initializers.variance_scaling(1.0, 'fan_in', 'normal'))
         self.w3 = nn.Dense(hidden_dim,
                          kernel_init=nn.initializers.variance_scaling(1.0, 'fan_in', 'normal'))
-    
+
     def __call__(self, x):
         return swiglu(x, self.w1, self.w2, self.w3)
 
@@ -209,107 +219,107 @@ class LLaMAMLP(nn.Module):
 class LLaMABlock(nn.Module):
     """LLaMA transformer block"""
     config: LLaMAConfig
-    
+
     def setup(self):
         self.attention_norm = RMSNorm(self.config.dim)
         self.attention = LLaMACausalSelfAttention(self.config)
         self.ffn_norm = RMSNorm(self.config.dim)
         self.ffn = LLaMAMLP(self.config)
         self.dropout = nn.Dropout(self.config.dropout_rate)
-    
+
     def __call__(self, x, freqs_cis, mask=None, deterministic=True):
         # Pre-norm for attention
         h = x + self.dropout(
             self.attention(self.attention_norm(x), freqs_cis, mask, deterministic),
             deterministic=deterministic
         )
-        
+
         # Pre-norm for FFN
         out = h + self.dropout(
             self.ffn(self.ffn_norm(h)),
             deterministic=deterministic
         )
-        
+
         return out
 
 # Full LLaMA Model
 class LLaMA3(nn.Module):
     """LLaMA language model"""
     config: LLaMAConfig
-    
+
     def setup(self):
         config = self.config
-        
+
         # Token embeddings
         self.token_embedding = nn.Embed(
-            config.vocab_size, 
+            config.vocab_size,
             config.dim,
             embedding_init=nn.initializers.normal(stddev=0.02)
         )
-        
+
         # Transformer blocks
         self.blocks = [LLaMABlock(config) for _ in range(config.n_layers)]
-        
+
         # Final layer norm
         self.norm_f = RMSNorm(config.dim)
-        
+
         # Output projection (tied with embeddings)
         self.lm_head = nn.Dense(
             config.vocab_size,
             kernel_init=nn.initializers.normal(stddev=0.02),
             use_bias=False
         )
-        
+
         # Pre-compute rotary embeddings
         self.freqs_cis = precompute_freqs_cis(
             config.dim // config.n_heads,
             config.max_seq_len,
             config.rope_theta
         )
-    
+
     def __call__(self, input_ids, deterministic=True):
         B, T = input_ids.shape
-        
+
         # Create causal attention mask
         mask = jnp.tril(
             jnp.ones((self.config.max_seq_len, self.config.max_seq_len))
         )
         mask = jnp.where(mask == 0, jnp.finfo(jnp.float32).min, 0.0)
         mask = mask[None, None, :T, :T]
-        
+
         # Get embeddings
         h = self.token_embedding(input_ids)
-        
+
         # Apply transformer blocks
         for block in self.blocks:
             h = block(h, self.freqs_cis, mask, deterministic)
-        
+
         # Apply final normalization
         h = self.norm_f(h)
-        
+
         # Get logits
         logits = self.lm_head(h)
-        
+
         return logits
-    
+
     def generate(self, input_ids, max_new_tokens, rng_key, temperature=0.8, top_k=40, top_p=0.95):
         """Generate text using the model"""
         B, T = input_ids.shape
-        
+
         # Create initial output array
         output = input_ids
-        
+
         # Generate tokens
         for i in range(max_new_tokens):
             # Keep the context within max sequence length
             curr_input = output[:, -self.config.max_seq_len:]
-            
+
             # Get logits for the next token
             logits = self(curr_input, deterministic=True)[:, -1, :]
-            
+
             # Apply temperature
             logits = logits / temperature
-            
+
             # Apply top-k filtering
             if top_k > 0:
                 top_k_v, top_k_i = jax.lax.top_k(logits, top_k)
@@ -318,30 +328,32 @@ class LLaMA3(nn.Module):
                     logits.shape
                 )
                 logits = jnp.where(indices_to_remove, logits, jnp.finfo(jnp.float32).min)
-            
+
             # Apply top-p (nucleus) filtering
             if top_p < 1.0:
-                sorted_logits, sorted_indices = jnp.sort(logits, axis=-1, descending=True)
+                sorted_indices = jnp.argsort(logits, axis=-1)[:, ::-1]  # Sort indices in descending order
+                sorted_logits = jnp.take_along_axis(logits, sorted_indices, axis=-1)  # Get sorted values
+
                 cumulative_probs = jnp.cumsum(jax.nn.softmax(sorted_logits, axis=-1), axis=-1)
-                
+
                 # Remove tokens with cumulative probability above the threshold
                 sorted_indices_to_remove = cumulative_probs > top_p
                 # Shift the indices to the right to keep the first token above threshold
                 sorted_indices_to_remove = jnp.roll(sorted_indices_to_remove, 1, axis=1)
                 sorted_indices_to_remove = sorted_indices_to_remove.at[:, 0].set(False)
-                
+
                 # Scatter sorted tensors to original indexing
                 indices_to_remove = jnp.zeros_like(logits, dtype=bool)
                 indices_to_remove = indices_to_remove.at[jnp.arange(B)[:, None], sorted_indices].set(sorted_indices_to_remove)
                 logits = jnp.where(indices_to_remove, jnp.finfo(jnp.float32).min, logits)
-            
+
             # Sample from the filtered distribution
             rng_key, sample_key = random.split(rng_key)
             next_token = random.categorical(sample_key, logits, shape=(B,))
-            
+
             # Append the sampled token to the sequence
             output = jnp.concatenate([output, next_token[:, None]], axis=1)
-        
+
         return output
 
 # Create initial training state with Flax TrainState
@@ -349,7 +361,7 @@ def create_train_state(model, config, rng_key):
     """Create initial training state."""
     # Initialize model parameters
     init_params = model.init(rng_key, jnp.ones((1, 1), dtype=jnp.int32))
-    
+
     # Create learning rate schedule
     lr_schedule = optax.warmup_cosine_decay_schedule(
         init_value=0.0,
@@ -358,7 +370,7 @@ def create_train_state(model, config, rng_key):
         decay_steps=config.max_steps,
         end_value=config.learning_rate * 0.1
     )
-    
+
     # Create optimizer
     optimizer = optax.chain(
         optax.clip_by_global_norm(1.0),
@@ -370,7 +382,7 @@ def create_train_state(model, config, rng_key):
             weight_decay=config.weight_decay
         )
     )
-    
+
     # Create and return train state - ensure parameters have consistent structure
     return train_state.TrainState.create(
         apply_fn=model.apply,
@@ -383,36 +395,36 @@ def prepare_datasets(config):
     """Load and prepare datasets"""
     # Load datasets
     wiki_dataset = load_dataset("karpathy/tiny_shakespeare", split="train")
-    
+
     # Print the dataset structure to understand its format
     print("Dataset structure:", list(wiki_dataset.features.keys()))
     print("First example:", wiki_dataset[0])
-    
+
     # Initialize tokenizer
     tokenizer = SentencePieceUnigramTokenizer()
-    
+
     # Train the tokenizer
     # First check what columns are actually available
     column_names = list(wiki_dataset.features.keys())
     text_column = "text" if "text" in column_names else column_names[0]
-    
+
     # Get a sample of texts for training the tokenizer
     # (for efficiency, we don't need to use the entire dataset)
     sample_texts = [
         example[text_column] for example in wiki_dataset.select(range(min(10000, len(wiki_dataset))))
         if isinstance(example[text_column], str) and example[text_column].strip()
     ]
-    
+
     # Train the tokenizer
     tokenizer.train_from_iterator(
         sample_texts,
         vocab_size=config.vocab_size,
         special_tokens=["<pad>", "<unk>", "<bos>", "<eos>"],
     )
-    
+
     # Save the tokenizer for later use
     tokenizer.save("llama_tokenizer.json")
-    
+
     def tokenize_function(example):
         # Make sure we're accessing the right column
         text = example[text_column]
@@ -420,47 +432,47 @@ def prepare_datasets(config):
             tokens = tokenizer.encode(text).ids
             return {"input_ids": tokens}
         return {"input_ids": []}
-    
+
     # Tokenize dataset
     tokenized_dataset = wiki_dataset.map(
         tokenize_function,
         remove_columns=column_names,  # Remove all original columns
         batched=False  # Process one example at a time for better error handling
     )
-    
+
     # Filter out empty examples
     tokenized_dataset = tokenized_dataset.filter(lambda x: len(x["input_ids"]) > 0)
-    
+
     # Convert to a format suitable for training
     # Flatten all token sequences into one long sequence
     all_tokens = []
     for example in tokenized_dataset:
         all_tokens.extend(example["input_ids"])
-    
+
     # Create a single "dataset" with just input_ids for easier slicing during training
     flattened_dataset = {"input_ids": all_tokens}
-    
+
     return flattened_dataset, tokenizer
 
 def get_batch(key, data, config):
     """Create a batch of data for training"""
     batch_size = config.batch_size
     seq_len = config.max_seq_len
-    
+
     # Generate random starting indices
     total_tokens = len(data["input_ids"]) - seq_len - 1  # -1 for target shifting
-    
+
     # Make sure we have enough tokens
     if total_tokens <= 0:
         raise ValueError(f"Not enough tokens in dataset. Found {len(data['input_ids'])}, need at least {seq_len + 2}")
-    
+
     # Generate batch_size random starting points
     ix = random.randint(key, (batch_size,), 0, total_tokens)
-    
+
     # Create input and target sequences
     x = jnp.stack([jnp.array(data["input_ids"][i:i+seq_len]) for i in ix])
     y = jnp.stack([jnp.array(data["input_ids"][i+1:i+seq_len+1]) for i in ix])
-    
+
     return x, y
 
 # TPU initialization and setup
@@ -469,14 +481,14 @@ def initialize_tpu():
     devices = jax.devices()
     n_devices = len(devices)
     print(f"Found {n_devices} JAX devices: {devices}")
-    
+
     # Check if TPUs are available
     if any(d.platform == 'tpu' for d in devices):
         print("TPU devices detected. Setting up for distributed training.")
         # Additional TPU-specific setup could go here
     else:
         print("No TPU devices found. Using available CPU/GPU.")
-    
+
     return n_devices
 
 # FIXED: Improved RNG key handling for multi-device setup
@@ -491,43 +503,43 @@ def create_device_rng_keys(rng, n_devices):
 def train_step(state, batch, dropout_rng):
     """Single training step"""
     inputs, targets = batch
-    
+
     # Define loss function
     def loss_fn(params):
         # Apply model with correct parameter structure
         logits = state.apply_fn({"params": params}, inputs, deterministic=False, rngs={'dropout': dropout_rng})
-        
+
         # Reshape for cross entropy
         logits = logits.reshape(-1, logits.shape[-1])
         targets_flat = targets.reshape(-1)
-        
+
         # Compute cross entropy loss
         loss = optax.softmax_cross_entropy_with_integer_labels(
             logits, targets_flat
         ).mean()
-        
+
         return loss
-    
+
     # Get gradients - make sure we're getting gradients for the actual parameters
     grad_fn = jax.value_and_grad(loss_fn)
-    
+
     # Check param structure and extract the inner params if needed
     if "params" in state.params:
         actual_params = state.params["params"]
     else:
         actual_params = state.params
-    
+
     loss, grads = grad_fn(actual_params)
-    
+
     # Now wrap the gradients in the same structure as state.params for apply_gradients
     if "params" in state.params:
         wrapped_grads = {"params": grads}
     else:
         wrapped_grads = grads
-    
+
     # Update state with correctly structured gradients
     new_state = state.apply_gradients(grads=wrapped_grads)
-    
+
     return new_state, loss
 
 # JIT-compiled training step for efficiency
@@ -544,32 +556,32 @@ def evaluate(model_apply_fn, params, eval_data, config, num_batches=50):
     """Evaluate model on validation data"""
     key = random.PRNGKey(42)
     total_loss = 0.0
-    
+
     for i in range(num_batches):
         key, batch_key = random.split(key)
         inputs, targets = get_batch(batch_key, eval_data, config)
-        
+
         # Forward pass
         # Check if params already has a 'params' key
         if 'params' in params:
             logits = model_apply_fn(params, inputs, deterministic=True)
         else:
             logits = model_apply_fn({'params': params}, inputs, deterministic=True)
-        
+
         # Reshape for cross entropy
         logits = logits.reshape(-1, logits.shape[-1])
         targets = targets.reshape(-1)
-        
+
         # Compute cross entropy loss
         loss = optax.softmax_cross_entropy_with_integer_labels(
             logits, targets
         ).mean()
-        
+
         total_loss += loss
-    
+
     avg_loss = total_loss / num_batches
     perplexity = jnp.exp(avg_loss)
-    
+
     return avg_loss, perplexity
 
 # FIXED: Main training function with corrected multi-device support
@@ -577,77 +589,88 @@ def train_llama(config, num_epochs=5, steps_per_epoch=1000, save_every=1000):
     """Train LLaMA model"""
     # Initialize TPU
     n_devices = initialize_tpu()
-    
+
     # Setup model
     model = LLaMA3(config)
     rng_key = random.PRNGKey(42)
-    
+
     # Create training state
     state = create_train_state(model, config, rng_key)
-    
-    # FIXED: Replicate the state across devices for multi-device training
+
+    # Replicate the state across devices for multi-device training
     if n_devices > 1:
         state = jax.device_put_replicated(state, jax.devices())
-    
+
     # Prepare datasets
     train_dataset, tokenizer = prepare_datasets(config)
-    
-    # Create checkpoint directory
-    checkpoint_dir = "llama_checkpoints"
+
+    # Create checkpoint directory with absolute path
+    checkpoint_dir = os.path.abspath("llama_checkpoints")
     os.makedirs(checkpoint_dir, exist_ok=True)
     
+    # Setup Orbax checkpointer
+    checkpointer = ocp.PyTreeCheckpointer()
+    options = ocp.CheckpointManagerOptions(
+        max_to_keep=3,
+        create=True
+    )
+    checkpoint_manager = ocp.CheckpointManager(
+        checkpoint_dir, 
+        checkpointer, 
+        options
+    )
+
     # Training loop
     rng_key = random.PRNGKey(0)
     step = 0
     total_steps = num_epochs * steps_per_epoch
-    
+
     print(f"Starting training for {num_epochs} epochs ({total_steps} steps)")
-    
+
     for epoch in range(num_epochs):
         epoch_loss = 0.0
-        
+
         for step_in_epoch in tqdm(range(steps_per_epoch), desc=f"Epoch {epoch+1}/{num_epochs}"):
             # Get a batch of data
             rng_key, batch_key = random.split(rng_key)
             batch_data = get_batch(batch_key, train_dataset, config)
-            
+
             # Training step
             if n_devices > 1:
-                # FIXED: Properly shard the batch across devices
                 # Calculate per-device batch size
                 per_device_batch = config.batch_size // n_devices
                 if per_device_batch == 0:
                     raise ValueError(f"Batch size {config.batch_size} is too small for {n_devices} devices")
-                
+
                 # Reshape batch data for multi-device training
                 inputs, targets = batch_data
-                
-                # FIXED: Reshape to (n_devices, per_device_batch, seq_len)
+
+                # Reshape to (n_devices, per_device_batch, seq_len)
                 inputs = inputs.reshape((n_devices, per_device_batch, inputs.shape[1]))
                 targets = targets.reshape((n_devices, per_device_batch, targets.shape[1]))
-                
+
                 batch_data = (inputs, targets)
-                
-                # FIXED: Create per-device RNG keys with proper shape for pmap
+
+                # Create per-device RNG keys with proper shape for pmap
                 rng_key, dropout_keys = create_device_rng_keys(rng_key, n_devices)
-                
+
                 # Apply pmapped training step
                 state, loss = train_step_pmap(state, batch_data, dropout_keys)
-                
+
                 # Average loss across devices
                 loss = jnp.mean(loss)
             else:
                 # Single device training
                 rng_key, dropout_key = random.split(rng_key)
                 state, loss = train_step_jit(state, batch_data, dropout_key)
-            
+
             epoch_loss += loss
             step += 1
-            
+
             # Log progress
             if step % 100 == 0:
                 print(f"Step {step}/{total_steps}, Loss: {loss:.4f}")
-            
+
             # Save checkpoint
             if step % save_every == 0:
                 if n_devices > 1:
@@ -655,16 +678,12 @@ def train_llama(config, num_epochs=5, steps_per_epoch=1000, save_every=1000):
                     save_state = jax.tree_map(lambda x: x[0], state)
                 else:
                     save_state = state
-                
-                # Save checkpoint using Flax's checkpoints utility
-                checkpoints.save_checkpoint(
-                    ckpt_dir=checkpoint_dir,
-                    target=save_state,
-                    step=step,
-                    overwrite=True
-                )
-                
-                # Generate sample text
+
+                # Save checkpoint using Orbax
+                save_args = orbax_utils.save_args_from_target(save_state)
+                checkpoint_manager.save(step, save_state, save_kwargs={'save_args': save_args})
+                print(f"Checkpoint saved at step {step}")
+
                 # Generate sample text
                 if n_devices > 1:
                     sample_params = jax.tree_map(lambda x: x[0], state.params)
@@ -697,40 +716,71 @@ def train_llama(config, num_epochs=5, steps_per_epoch=1000, save_every=1000):
                         top_k=config.top_k,
                         top_p=config.top_p,
                         method=model.generate
-                    )                
+                    )
                 generated_text = tokenizer.decode(generated[0].tolist())
                 print(f"\nSample generation at step {step}:\n{generated_text}\n")
-        
+
         # End of epoch
         avg_epoch_loss = epoch_loss / steps_per_epoch
         print(f"Epoch {epoch+1} complete. Average loss: {avg_epoch_loss:.4f}")
-        
+
         # Evaluate on validation set
         if n_devices > 1:
             eval_params = jax.tree_map(lambda x: x[0], state.params)
         else:
             eval_params = state.params
-        
+
         # Validation loss and perplexity
         val_loss, perplexity = evaluate(model.apply, eval_params, train_dataset, config)
         print(f"Validation Loss: {val_loss:.4f}, Perplexity: {perplexity:.2f}")
-    
+
     # Save final model
     if n_devices > 1:
         final_state = jax.tree_map(lambda x: x[0], state)
     else:
         final_state = state
-    
-    checkpoints.save_checkpoint(
-        ckpt_dir=checkpoint_dir,
-        target=final_state,
-        step=total_steps,
-        prefix="llama_final_",
-        overwrite=True
+
+    # Save final checkpoint using Orbax
+    save_args = orbax_utils.save_args_from_target(final_state)
+    checkpoint_manager.save(
+        total_steps, 
+        final_state, 
+        save_kwargs={'save_args': save_args}
     )
     print("Training complete. Final model saved.")
-    
+
     return final_state
+
+def load_checkpoint(checkpoint_dir, step=None):
+    """Load a checkpoint from the given directory"""
+    checkpoint_dir = os.path.abspath(checkpoint_dir)
+    
+    # Setup Orbax checkpointer
+    checkpointer = ocp.PyTreeCheckpointer()
+    options = ocp.CheckpointManagerOptions(create=False)
+    checkpoint_manager = ocp.CheckpointManager(
+        checkpoint_dir, 
+        checkpointer, 
+        options
+    )
+    
+    # Get the latest step if none specified
+    if step is None:
+        step = checkpoint_manager.latest_step()
+        if step is None:
+            raise ValueError(f"No checkpoints found in {checkpoint_dir}")
+    
+    # Create a dummy state to restore structure
+    model = LLaMA3(LLaMAConfig())
+    rng_key = random.PRNGKey(0)
+    dummy_state = create_train_state(model, LLaMAConfig(), rng_key)
+    
+    # Restore checkpoint
+    restored_state = checkpoint_manager.restore(step, dummy_state)
+    print(f"Restored checkpoint from step {step}")
+    
+    return restored_state, step
+
 
 # Text generation function
 def generate_text(model, params, tokenizer, prompt, max_new_tokens=100, temperature=0.8):
@@ -738,10 +788,10 @@ def generate_text(model, params, tokenizer, prompt, max_new_tokens=100, temperat
     # Ensure prompt is a string
     if not isinstance(prompt, str):
         prompt = str(prompt)
-        
+
     prompt_tokens = tokenizer.encode(prompt).ids
     prompt_tensor = jnp.array([prompt_tokens])
-    
+
     rng_key = random.PRNGKey(0)
     # Check if params already has a 'params' key
     if 'params' in params:
@@ -766,7 +816,7 @@ def generate_text(model, params, tokenizer, prompt, max_new_tokens=100, temperat
             top_p=0.95,
             method=model.generate
         )
-    
+
     # Convert jnp array to Python list before decoding
     generated_text = tokenizer.decode(generated[0].tolist())
     return generated_text
@@ -779,16 +829,16 @@ if __name__ == "__main__":
     # Create checkpoint directory with absolute path
     checkpoint_dir = os.path.abspath("llama_checkpoints")
     os.makedirs(checkpoint_dir, exist_ok=True)
-    
+
     # Train the model
     final_state = train_llama(config, num_epochs=5, steps_per_epoch=1000)
-    
+
     # Generate some text
     model = LLaMA3(config)
     tokenizer = prepare_datasets(config)[1]
-    
+
     prompt = "In a distant galaxy"
     generated_text = generate_text(model, final_state.params, tokenizer, prompt)
-    
+
     print("\nGenerated text:")
     print(generated_text)
