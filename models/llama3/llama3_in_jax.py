@@ -35,7 +35,7 @@ class LLaMAConfig:
     rope_theta: float = 10000.0  # Base for rotary embeddings
 
     # Training settings
-    batch_size: int = 32
+    batch_size: int = 16
     learning_rate: float = 3e-4
     weight_decay: float = 0.1
     warmup_steps: int = 1000
@@ -552,7 +552,7 @@ def train_step_pmap_wrapper(state, batch, dropout_rng):
 
 train_step_pmap = jax.pmap(train_step_pmap_wrapper, axis_name='batch')
 
-def evaluate(model_apply_fn, params, eval_data, config, num_batches=50):
+def evaluate(model_apply_fn, params, eval_data, config, num_batches=10):
     """Evaluate model on validation data"""
     key = random.PRNGKey(42)
     total_loss = 0.0
@@ -675,7 +675,7 @@ def train_llama(config, num_epochs=5, steps_per_epoch=1000, save_every=1000):
             if step % save_every == 0:
                 if n_devices > 1:
                     # For multi-device, save only the first copy
-                    save_state = jax.tree_map(lambda x: x[0], state)
+                    save_state = jax.tree.map(lambda x: x[0], state)
                 else:
                     save_state = state
 
@@ -686,7 +686,7 @@ def train_llama(config, num_epochs=5, steps_per_epoch=1000, save_every=1000):
 
                 # Generate sample text
                 if n_devices > 1:
-                    sample_params = jax.tree_map(lambda x: x[0], state.params)
+                    sample_params = jax.tree.map(lambda x: x[0], state.params)
                 else:
                     sample_params = state.params
 
@@ -726,7 +726,7 @@ def train_llama(config, num_epochs=5, steps_per_epoch=1000, save_every=1000):
 
         # Evaluate on validation set
         if n_devices > 1:
-            eval_params = jax.tree_map(lambda x: x[0], state.params)
+            eval_params = jax.tree.map(lambda x: x[0], state.params)
         else:
             eval_params = state.params
 
@@ -736,7 +736,7 @@ def train_llama(config, num_epochs=5, steps_per_epoch=1000, save_every=1000):
 
     # Save final model
     if n_devices > 1:
-        final_state = jax.tree_map(lambda x: x[0], state)
+        final_state = jax.tree.map(lambda x: x[0], state)
     else:
         final_state = state
 
