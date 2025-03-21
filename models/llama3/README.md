@@ -2,7 +2,7 @@
 
 # 🦙 LLaMA 3 in JAX/Flax
 
-[![Open In Colab](https://colab.research.google.com/github/your-repo/llama3_in_jax.ipynb)](https://colab.research.google.com/github/your-repo/llama3_in_jax.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dhyaneesh/awesome-jax-flax-llms/blob/main/llama3_in_jax.ipynb)
 
 This repository provides a **pure JAX/Flax** implementation of the **LLaMA 3** language model, optimized for **TPU/GPU** execution. It includes full training, evaluation, checkpointing, and text generation support — all built from scratch using efficient JAX primitives and Flax modules.
 
