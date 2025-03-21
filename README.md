@@ -21,16 +21,16 @@ A compact transformer-based language model implemented in **pure JAX/Flax**. Thi
 📌 *Notebook: `models/gpt-2/gpt2_in_jax.ipynb`*  
 📌 *Script: `models/gpt-2/train.py`*  
 
-### ✅ **Llama 3 - JAX (WIP)**  
+### ✅ **Llama 3 - JAX/Flax**  
 An extension of the Llama series, incorporating **state-of-the-art optimizations** in JAX for handling **longer context windows** and **reduced memory footprint** with precision tuning. 
 
 📌 *Notebook: `models/llama3/llama3_in_jax.ipynb`*  
 📌 *Script: `models/llama3/llama3_in_jax.py`*  
 
-### ⏳ **DeepSeek-R1 - JAX (WIP)**  
+### ⏳ **DeepSeek-R1 - JAX/Flax (WIP)**  
 A **cutting-edge deep learning model** designed for **highly efficient semantic search**, leveraging **advanced transformer architectures** and **optimizations in JAX** for **faster retrieval and reduced computational costs**.
 
-### 📅 **Mistral - JAX (Coming Soon)**  
+### 📅 **Mistral - JAX/Flax (Coming Soon)**  
 A high-performance implementation of the **Mistral architecture**, featuring **dense & sparse mixture-of-expert layers**. This model will showcase **advanced TPU utilization** and optimized autoregressive decoding.  
 
 ---
