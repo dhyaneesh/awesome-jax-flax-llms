@@ -1,6 +1,6 @@
 # 📝 GPT-2 in JAX/Flax
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dhyaneesh/awesome-jax-flax-llms/blob/main/gpt2_in_jax.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dhyaneesh/awesome-jax-flax-llms/blob/main/models/gpt-2/gpt2_in_jax.ipynb)
 
 This folder contains a JAX/Flax implementation of the **GPT-2** language model. As part of the larger **awesome-jax-flax-llms** project, this implementation demonstrates how to efficiently train and run transformer-based models on **TPUs and GPUs** using JAX.
 
