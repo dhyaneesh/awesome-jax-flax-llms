@@ -27,10 +27,10 @@ An extension of the Llama series, incorporating **state-of-the-art optimizations
 📌 *Notebook: `models/llama3/llama3_in_jax.ipynb`*  
 📌 *Script: `models/llama3/llama3_in_jax.py`*  
 
-### ✅ **Gemma - JAX/Flax**  
+### ⏳ **Gemma - JAX/Flax** (WIP)
 A lightweight, open-weight transformer model from Google, implemented in **pure JAX/Flax**. This version emphasizes **modular design**, efficient **parameter sharing**, and **scalability** across TPUs/GPUs. Ideal for experimentation with **instruction tuning** and **alignment** techniques.  
 
-📌 *Notebook: `models/gemma/gemma_in_jax.ipynb`*  
+⏳ *Notebook: `models/gemma/gemma_in_jax.ipynb`*  
 📌 *Script: `models/gemma/gemma_in_jax.py`*  
 
 Let me know if you want to add details like architecture size, tokenizer notes, or integration hooks.
