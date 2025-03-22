@@ -1,6 +1,6 @@
 # 🚀 **Awesome JAX & Flax LLMs**  
 
-Welcome to [awesome-jax-flax-llms](https://github.com/dhyaneesh/awesome-jax-flax-llms), a curated collection of open-source large language model (LLM) implementations built with **JAX & Flax**. This repository provides modular, efficient, and scalable implementations of transformer-based models, optimized for **high-speed TPU/GPU training** and **efficient inference**.  
+Welcome to [awesome-jax-flax-llms](https://github.com/dhyaneesh/awesome-jax-flax-llms), a collection of open-source large language model (LLM) implementations built with **JAX & Flax**. This repository provides modular, efficient, and scalable implementations of transformer-based models, optimized for **high-speed TPU/GPU training** and **efficient inference**.  
 
 > [!IMPORTANT]
 > The implementations are for educational purposes only, which means it is not for any production but it covers all components of the models and can be changed to fit production needs.
@@ -21,10 +21,24 @@ A compact transformer-based language model implemented in **pure JAX/Flax**. Thi
 📌 *Notebook: `models/gpt-2/gpt2_in_jax.ipynb`*  
 📌 *Script: `models/gpt-2/train.py`*  
 
-### ⏳ **Llama 3 - JAX (WIP)**  
+### ✅ **Llama 3 - JAX/Flax**  
 An extension of the Llama series, incorporating **state-of-the-art optimizations** in JAX for handling **longer context windows** and **reduced memory footprint** with precision tuning. 
 
-### 📅 **Mistral - JAX (Coming Soon)**  
+📌 *Notebook: `models/llama3/llama3_in_jax.ipynb`*  
+📌 *Script: `models/llama3/llama3_in_jax.py`*  
+
+### ⏳ **Gemma - JAX/Flax** (WIP)
+A lightweight, open-weight transformer model from Google, implemented in **pure JAX/Flax**. This version emphasizes **modular design**, efficient **parameter sharing**, and **scalability** across TPUs/GPUs. Ideal for experimentation with **instruction tuning** and **alignment** techniques.  
+
+⏳ *Notebook: `models/gemma/gemma_in_jax.ipynb`*  
+📌 *Script: `models/gemma/gemma_in_jax.py`*  
+
+Let me know if you want to add details like architecture size, tokenizer notes, or integration hooks.
+
+### 📅 **DeepSeek-R1 - JAX/Flax (Coming Soon)**  
+A **cutting-edge deep learning model** designed for **highly efficient semantic search**, leveraging **advanced transformer architectures** and **optimizations in JAX** for **faster retrieval and reduced computational costs**.
+
+### 📅 **Mistral - JAX/Flax (Coming Soon)**  
 A high-performance implementation of the **Mistral architecture**, featuring **dense & sparse mixture-of-expert layers**. This model will showcase **advanced TPU utilization** and optimized autoregressive decoding.  
 
 ---

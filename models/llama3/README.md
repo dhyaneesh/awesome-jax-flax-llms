@@ -1,150 +1,121 @@
+---
+
 # 🦙 LLaMA 3 in JAX/Flax
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/your-repo/llama3_in_jax.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dhyaneesh/awesome-jax-flax-llms/blob/main/models/llama3/llama3_in_jax.ipynb)
 
-This repository contains a **JAX/Flax implementation** of the **LLaMA 3** language model, optimized for execution on **TPUs and GPUs**. The implementation leverages **XLA compilation** and **Optax optimizers** for high-performance training.
+This is a **pure JAX/Flax** implementation of the **LLaMA 3** language model, optimized for **TPU/GPU** execution. It includes full training, evaluation, checkpointing, and text generation support — all built from scratch using efficient JAX primitives and Flax modules.
 
-## 🚀 Overview
+---
 
-The `llama3_in_jax.py` script provides a modular implementation of **LLaMA 3** using **JAX & Flax**, with key features including:
+## 🚀 Highlights
 
-- **Autoregressive text generation** with an optimized decoding process.
-- **Efficient TPU/GPU training** using JAX's `pmap` for parallelism.
-- **Optimized Transformer architecture** with **Grouped-Query Attention (GQA)** and **Rotary Positional Embeddings (RoPE)**.
-- **RMSNorm and SwiGLU activations** for stable training.
+- 🧠 **Decoder-only Transformer** architecture with RoPE, GQA, RMSNorm & SwiGLU.
+- ⚡ **Optimized TPU/GPU Training** using `pmap` and `jit`.
+- 🧪 **Tokenizer training** and **dataset preprocessing** with Hugging Face Datasets.
+- 💾 **Checkpointing & Restore** using Orbax.
+- ✍️ **Text Generation** with temperature, top-k, and top-p sampling.
+- ✅ Minimal dependencies & portable design.
 
-## 🧠 Model Architecture
+---
 
-LLaMA 3 is a **decoder-only transformer model** designed for efficiency and scalability. Key components include:
+## 🧱 Architecture Overview
 
-- **Multi-head Self-Attention with Grouped-Query Attention (GQA)**: Reduces memory and speeds up inference.
-- **Rotary Positional Embeddings (RoPE)**: Improves long-context performance.
-- **SwiGLU Activation Function**: Enhances non-linearity in feedforward layers.
-- **Root Mean Square Normalization (RMSNorm)**: Replaces LayerNorm for stability.
+| Component | Details |
+|----------|---------|
+| **Attention** | Multi-head causal attention with **Grouped-Query Attention (GQA)** |
+| **Position Encoding** | **Rotary Positional Embeddings (RoPE)** |
+| **MLP** | Uses **SwiGLU** nonlinearity |
+| **Normalization** | **RMSNorm** instead of LayerNorm |
+| **Optimizer** | **Optax** with warmup, cosine decay & weight decay |
+| **Checkpointing** | **Orbax CheckpointManager** with training resume & evaluation |
+| **Text Generation** | Supports top-k, top-p, temperature sampling |
 
-## 🛠 Features
+---
 
-✅ **Pure JAX/Flax Implementation** (No PyTorch dependencies).  
-✅ **Efficient TPU/GPU Training** via **pmap and vmap**.  
-✅ **Custom Rotary Position Embeddings (RoPE) Implementation**.  
-✅ **Grouped-Query Attention (GQA) for Faster Inference**.  
-✅ **Optax-based Optimizer with Warmup & Weight Decay**.  
-✅ **Minimal Dependencies & Hugging Face Dataset Support**.  
+## 📦 File Structure
 
-## 📌 Implementation Details
+- `llama3_in_jax.py` – Complete model, tokenizer, training, evaluation, and generation code.
+- `llama3_in_jax.ipynb` – Notebook interface for interactive training/inference.
+- `README.md` – Project documentation (you’re reading it!).
+- `llama_tokenizer.json` – Tokenizer saved after training (auto-generated).
+- `llama_checkpoints/` – Checkpoints will be stored here (auto-generated).
 
-### 1️⃣ **Core Model Components**
+---
 
-The model is implemented with **Flax.linen**, featuring:
+## 📚 Example Usage
 
-- **Custom RMSNorm** for normalization.
-- **Precomputed Rotary Position Embeddings** for improved efficiency.
-- **Multi-head Causal Self-Attention** with Grouped-Query Attention.
-- **SwiGLU-based MLP Layers** for improved expressiveness.
-
-```python
-class LLaMACausalSelfAttention(nn.Module):
-    """Multi-head causal self-attention with Grouped-Query Attention."""
-    config: LLaMAConfig
-    
-    def setup(self):
-        self.wq = nn.Dense(self.config.dim)
-        self.wk = nn.Dense(self.config.dim)
-        self.wv = nn.Dense(self.config.dim)
-        self.wo = nn.Dense(self.config.dim)
-    
-    def __call__(self, x, freqs_cis, mask=None):
-        q, k, v = self.wq(x), self.wk(x), self.wv(x)
-        q, k = apply_rotary_emb(q, k, freqs_cis)
-        output = flash_attention(q, k, v, mask)
-        return self.wo(output)
-```
-
-### 2️⃣ **Training Pipeline**
-
-The model is trained using **Optax optimizers**, featuring:
-
-- **Warmup Cosine Decay Learning Rate Scheduler**.
-- **AdamW with Gradient Clipping**.
-- **Cross-Entropy Loss Computation for Language Modeling**.
-
-```python
-optimizer = optax.chain(
-    optax.clip_by_global_norm(1.0),
-    optax.adamw(
-        learning_rate=lr_schedule,
-        weight_decay=config.weight_decay
-    )
-)
-```
-
-### 3️⃣ **Parallel Training on TPU**
-
-JAX’s **pmap** enables efficient TPU training by distributing computation across multiple devices.
-
-```python
-@jax.pmap
-def train_step(state, batch):
-    def loss_fn(params):
-        logits = state.apply_fn({'params': params}, batch['input_ids'])
-        loss = optax.softmax_cross_entropy_with_integer_labels(logits, batch['labels']).mean()
-        return loss
-    
-    loss, grads = jax.value_and_grad(loss_fn)(state.params)
-    new_state = state.apply_gradients(grads=grads)
-    return new_state, loss
-```
-
-## 🏗 Setup & Usage
-
-### **1️⃣ Install Dependencies**
-
-Ensure you have JAX, Flax, and Optax installed:
+### 🛠️ 1. Install dependencies
 
 ```bash
-pip install jax flax optax datasets transformers
+pip install jax flax optax datasets tokenizers tqdm orbax-checkpoint
 ```
 
-### **2️⃣ Load a Hugging Face Dataset**
-
-The script supports **Hugging Face Datasets**:
-
-```python
-from datasets import load_dataset
-dataset = load_dataset("karpathy/tiny_shakespeare", split="train")
-```
-
-### **3️⃣ Train the Model**
-
-Run the script to start training:
+### 📖 2. Train the model
 
 ```bash
 python llama3_in_jax.py
 ```
 
-Or execute the Jupyter notebook in **Google Colab (with TPU runtime)**.
+> Trains LLaMA on Tiny Shakespeare with tokenizer training, checkpointing, and periodic text sampling.
 
-### **4️⃣ Generate Text**
-
-Use the trained model for inference:
+### 🧪 3. Generate text from trained model
 
 ```python
-prompt = "Once upon a time"
-output = model.generate(input_ids, max_new_tokens=50, rng_key=rng_key)
-print(output)
+from llama3_in_jax import generate_text, LLaMA3, LLaMAConfig, load_checkpoint
+from tokenizers import SentencePieceUnigramTokenizer
+
+# Load model & tokenizer
+model = LLaMA3(LLaMAConfig())
+state, step = load_checkpoint("llama_checkpoints")
+tokenizer = SentencePieceUnigramTokenizer("llama_tokenizer.json")
+
+# Generate
+prompt = "In a distant galaxy"
+print(generate_text(model, state.params, tokenizer, prompt))
 ```
-
-## 📖 Next Steps
-
-- ✅ **Fine-tuning Support** for custom datasets.
-- ✅ **Optimized Inference with XLA Compilation**.
-- ✅ **Experiment with Different Tokenization Methods**.
-
-## 📜 License
-
-This project is licensed under the **GPL-3.0** license. See the [LICENSE](../LICENSE) file for details.
 
 ---
 
-💡 Contributions & feedback are welcome! 🚀
+## 🧪 Training Pipeline
 
+The training loop includes:
+
+- **Tokenizer training** from raw HuggingFace datasets.
+- **Gradient clipping**, **warmup**, and **cosine decay** scheduling.
+- **pmap**-based TPU support with sharded dropout RNG.
+- Periodic **evaluation** and **text generation**.
+- **Orbax checkpointing** every N steps.
+
+---
+
+## 📈 Evaluation
+
+After each epoch, the model is evaluated using average loss and perplexity over held-out samples.
+
+```python
+val_loss, perplexity = evaluate(model.apply, state.params, eval_data, config)
+print(f"Validation Loss: {val_loss:.4f}, Perplexity: {perplexity:.2f}")
+```
+
+---
+
+## 🧠 Future Improvements
+
+- [x] Multi-device TPU training.
+- [x] Tokenizer training + save/load support.
+- [x] Checkpointing with Orbax.
+- [ ] Distributed inference server (WIP).
+- [ ] Add LoRA or QLoRA fine-tuning.
+
+---
+
+## 📜 License
+
+Licensed under the **GPL-3.0** license. See the [LICENSE](../LICENSE) for details.
+
+---
+
+💡 **Contributions welcome** – feel free to open issues, submit PRs, or fork and experiment!
+
+---
