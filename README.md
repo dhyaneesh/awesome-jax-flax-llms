@@ -27,7 +27,15 @@ An extension of the Llama series, incorporating **state-of-the-art optimizations
 📌 *Notebook: `models/llama3/llama3_in_jax.ipynb`*  
 📌 *Script: `models/llama3/llama3_in_jax.py`*  
 
-### ⏳ **DeepSeek-R1 - JAX/Flax (WIP)**  
+### ✅ **Gemma - JAX/Flax**  
+A lightweight, open-weight transformer model from Google, implemented in **pure JAX/Flax**. This version emphasizes **modular design**, efficient **parameter sharing**, and **scalability** across TPUs/GPUs. Ideal for experimentation with **instruction tuning** and **alignment** techniques.  
+
+📌 *Notebook: `models/gemma/gemma_in_jax.ipynb`*  
+📌 *Script: `models/gemma/gemma_in_jax.py`*  
+
+Let me know if you want to add details like architecture size, tokenizer notes, or integration hooks.
+
+### 📅 **DeepSeek-R1 - JAX/Flax (Coming Soon)**  
 A **cutting-edge deep learning model** designed for **highly efficient semantic search**, leveraging **advanced transformer architectures** and **optimizations in JAX** for **faster retrieval and reduced computational costs**.
 
 ### 📅 **Mistral - JAX/Flax (Coming Soon)**  
