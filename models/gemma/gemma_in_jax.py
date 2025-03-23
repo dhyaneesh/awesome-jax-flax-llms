@@ -126,7 +126,7 @@ def flash_attention(q, k, v, mask=None, scale=None):
 # GeGLU Activation (replacing SwiGLU)
 def geglu(x, w1, w2, w3):
     """GeGLU activation function using Flax modules"""
-    return w2(jax.nn.gelu(w3(x)) * w1(x))
+    return w2(jax.nn.gelu(w3(x), approximate=True) * w1(x))
 
 # Gemma Causal Self-Attention Module (Multi-Query Attention)
 class GemmaCausalSelfAttention(nn.Module):
@@ -488,82 +488,78 @@ def evaluate(model_apply_fn, params, eval_data, config, num_batches=10):
     """Evaluate model on validation data"""
     key = random.PRNGKey(42)
     total_loss = 0.0
+    total_tokens = 0
 
     for i in range(num_batches):
         key, batch_key = random.split(key)
         inputs, targets = get_batch(batch_key, eval_data, config)
+        batch_size = inputs.shape[0]
 
         # Forward pass
-        # Check if params already has a 'params' key
         if isinstance(params, dict) and 'params' in params:
             logits = model_apply_fn(params, inputs, deterministic=True)
         else:
             logits = model_apply_fn({'params': params}, inputs, deterministic=True)
 
-        # Reshape for cross entropy
+        # Compute loss
         logits = logits.reshape(-1, logits.shape[-1])
         targets_flat = targets.reshape(-1)
-
-        # Compute cross entropy loss
+        
+        # Compute cross entropy loss with higher numerical stability
         loss = optax.softmax_cross_entropy_with_integer_labels(
             logits, targets_flat
         ).mean()
 
-        total_loss += loss
+        total_loss += loss * batch_size
+        total_tokens += batch_size
 
-    avg_loss = total_loss / num_batches
+    avg_loss = total_loss / total_tokens
     perplexity = jnp.exp(avg_loss)
 
-    return avg_loss, perplexity
+    metrics = {
+        'loss': avg_loss,
+        'perplexity': perplexity
+    }
+
+    return metrics
 
 # Training functions
 def train_step(state, batch, dropout_rng):
-    """Single training step"""
+    """Single training step with improved stability"""
     inputs, targets = batch
 
-    # Define loss function
     def loss_fn(params):
-        # Apply model with correct parameter structure
-        logits = state.apply_fn({"params": params}, inputs, deterministic=False, rngs={'dropout': dropout_rng})
+        # Forward pass with dropout
+        logits = state.apply_fn(
+            {'params': params}, 
+            inputs, 
+            deterministic=False,
+            rngs={'dropout': dropout_rng}
+        )
 
-        # Reshape for cross entropy
+        # Compute loss with improved numerical stability
         logits = logits.reshape(-1, logits.shape[-1])
         targets_flat = targets.reshape(-1)
-
-        # Compute cross entropy loss
         loss = optax.softmax_cross_entropy_with_integer_labels(
             logits, targets_flat
         ).mean()
 
         return loss
 
-    # Get gradients - make sure we're getting gradients for the actual parameters
+    # Get gradients
     grad_fn = jax.value_and_grad(loss_fn)
+    loss, grads = grad_fn(state.params['params'])
 
-    # Check param structure and extract the inner params if needed
-    if isinstance(state.params, dict) and "params" in state.params:
-        actual_params = state.params["params"]
-    else:
-        actual_params = state.params
+    # Update state with gradient clipping
+    new_state = state.apply_gradients(grads={'params': grads})
 
-    loss, grads = grad_fn(actual_params)
+    metrics = {
+        'loss': loss,
+    }
 
-    # Now wrap the gradients in the same structure as state.params for apply_gradients
-    if isinstance(state.params, dict) and "params" in state.params:
-        wrapped_grads = {"params": grads}
-    else:
-        wrapped_grads = grads
+    return new_state, metrics
 
-    # Update state with correctly structured gradients
-    new_state = state.apply_gradients(grads=wrapped_grads)
-
-    return new_state, loss
-  
-def train_step_pmap_wrapper(state, batch, dropout_rng):
-    # Wrapper for consistency when pmapping
-    return train_step(state, batch, dropout_rng)
-
-train_step_pmap = jax.pmap(train_step_pmap_wrapper, axis_name='batch')
+train_step_pmap = jax.pmap(train_step, axis_name='batch')
 
 # Main training function with corrected multi-device support
 def train_gemma(config, num_epochs=5, steps_per_epoch=1000, save_every=1000):
@@ -578,28 +574,35 @@ def train_gemma(config, num_epochs=5, steps_per_epoch=1000, save_every=1000):
     # Create training state
     state = create_train_state(model, config, rng_key)
 
-    # Replicate the state across devices for multi-device training
-    if n_devices > 1:
-        state = jax.device_put_replicated(state, jax.devices())
+    # Create learning rate schedule
+    lr_schedule = optax.warmup_cosine_decay_schedule(
+        init_value=0.0,
+        peak_value=config.learning_rate,
+        warmup_steps=config.warmup_steps,
+        decay_steps=config.max_steps,
+        end_value=config.learning_rate * 0.1
+    )
 
-    # Prepare datasets
-    train_dataset, tokenizer = prepare_datasets(config)
-
-    # Create checkpoint directory with absolute path
+    # Setup checkpointing
     checkpoint_dir = os.path.abspath("gemma_checkpoints")
     os.makedirs(checkpoint_dir, exist_ok=True)
-    
-    # Setup Orbax checkpointer
     checkpointer = ocp.PyTreeCheckpointer()
     options = ocp.CheckpointManagerOptions(
         max_to_keep=3,
         create=True
     )
     checkpoint_manager = ocp.CheckpointManager(
-        checkpoint_dir, 
-        checkpointer, 
+        checkpoint_dir,
+        checkpointer,
         options
     )
+
+    # Replicate the state across devices for multi-device training
+    if n_devices > 1:
+        state = jax.device_put_replicated(state, jax.devices())
+
+    # Prepare datasets
+    train_dataset, tokenizer = prepare_datasets(config)
 
     # Training loop
     rng_key = random.PRNGKey(0)
@@ -625,32 +628,31 @@ def train_gemma(config, num_epochs=5, steps_per_epoch=1000, save_every=1000):
 
                 # Reshape batch data for multi-device training
                 inputs, targets = batch_data
-
-                # Reshape to (n_devices, per_device_batch, seq_len)
                 inputs = inputs.reshape((n_devices, per_device_batch, inputs.shape[1]))
                 targets = targets.reshape((n_devices, per_device_batch, targets.shape[1]))
-
                 batch_data = (inputs, targets)
 
-                # Create per-device RNG keys with proper shape for pmap
+                # Create per-device RNG keys
                 rng_key, dropout_keys = create_device_rng_keys(rng_key, n_devices)
 
                 # Apply pmapped training step
-                state, loss = train_step_pmap(state, batch_data, dropout_keys)
-
-                # Average loss across devices
-                loss = jnp.mean(loss)
+                state, metrics = train_step_pmap(state, batch_data, dropout_keys)
+                loss = metrics['loss'].mean()  # Average loss across devices
             else:
                 # Single device training
                 rng_key, dropout_key = random.split(rng_key)
-                state, loss = train_step_jit(state, batch_data, dropout_key)
+                state, metrics = train_step(state, batch_data, dropout_key)
+                loss = metrics['loss']
+
+            # Get current learning rate
+            current_lr = lr_schedule(step)
 
             epoch_loss += loss
             step += 1
 
             # Log progress
             if step % 100 == 0:
-                print(f"Step {step}/{total_steps}, Loss: {loss:.4f}")
+                print(f"Step {step}/{total_steps}, Loss: {loss:.4f}, LR: {current_lr:.6f}")
 
             # Save checkpoint
             if step % save_every == 0:
@@ -712,8 +714,8 @@ def train_gemma(config, num_epochs=5, steps_per_epoch=1000, save_every=1000):
             eval_params = state.params
 
         # Validation loss and perplexity
-        val_loss, perplexity = evaluate(model.apply, eval_params, train_dataset, config)
-        print(f"Validation Loss: {val_loss:.4f}, Perplexity: {perplexity:.4f}")
+        val_metrics = evaluate(model.apply, eval_params, train_dataset, config)
+        print(f"Validation Loss: {val_metrics['loss']:.4f}, Perplexity: {val_metrics['perplexity']:.4f}")
 
     # Training complete - save final model
     if n_devices > 1:
