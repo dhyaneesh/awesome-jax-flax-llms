@@ -1,6 +1,6 @@
 # 🧬 Gemma in JAX/Flax
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/YOUR_USERNAME/YOUR_REPO/blob/main/gemma_in_jax.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dhyaneesh/awesome-jax-flax-llms/blob/main/gemma_in_jax.ipynb)
 
 This is a **pure JAX/Flax** implementation of **Gemma**, a decoder-only transformer model with **multi-query attention**, built for **TPU/GPU** training and inference. It includes training, evaluation, checkpointing, and text generation — fully from scratch using efficient JAX and Flax building blocks.
 
