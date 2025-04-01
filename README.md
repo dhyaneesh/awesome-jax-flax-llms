@@ -19,19 +19,22 @@ Welcome to [awesome-jax-flax-llms](https://github.com/dhyaneesh/awesome-jax-flax
 A compact transformer-based language model implemented in **pure JAX/Flax**. This implementation leverages **XLA optimizations** for parallelism, making it efficient on **TPUs and GPUs**. It serves as the foundation for exploring JAX-based language modeling.  
 
 📌 *Notebook: `models/gpt-2/gpt2_in_jax.ipynb`*  
-📌 *Script: `models/gpt-2/train.py`*  
+📌 *Scripts: `models/gpt-2/train.py`*
+             *`models/gpt-2/model.py`*
 
 ### ✅ **Llama 3 - JAX/Flax**  
 An extension of the Llama series, incorporating **state-of-the-art optimizations** in JAX for handling **longer context windows** and **reduced memory footprint** with precision tuning. 
 
 📌 *Notebook: `models/llama3/llama3_in_jax.ipynb`*  
-📌 *Script: `models/llama3/llama3_in_jax.py`*  
+📌 *Script: `models/llama3/train.py`* 
+            *`models/llama3/model.py`*
 
 ### ⏳ **Gemma - JAX/Flax** (WIP)
 A lightweight, open-weight transformer model from Google, implemented in **pure JAX/Flax**. This version emphasizes **modular design**, efficient **parameter sharing**, and **scalability** across TPUs/GPUs. Ideal for experimentation with **instruction tuning** and **alignment** techniques.  
 
 ⏳ *Notebook: `models/gemma/gemma_in_jax.ipynb`*  
-📌 *Script: `models/gemma/gemma_in_jax.py`*  
+📌 *Script: `models/gemma/model.py`*
+           *`models/gpt-2/train.py`*
 
 Let me know if you want to add details like architecture size, tokenizer notes, or integration hooks.
 
