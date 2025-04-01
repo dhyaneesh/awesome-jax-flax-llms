@@ -1,103 +1,77 @@
-# Awesome JAX/Flax LLMs
+# 🚀 **Awesome JAX & Flax LLMs**  
 
-Welcome to **Awesome JAX/Flax LLMs** – a curated collection of resources, libraries, projects, and tools focused on building, training, and deploying Large Language Models (LLMs) using [JAX](https://github.com/google/jax) and [Flax](https://github.com/google/flax). This repository aims to be your go-to guide for exploring the power of JAX's high-performance computing and Flax's flexible neural network ecosystem in the world of LLMs.
+Welcome to [awesome-jax-flax-llms](https://github.com/dhyaneesh/awesome-jax-flax-llms), a collection of open-source large language model (LLM) implementations built with **JAX & Flax**. This repository provides modular, efficient, and scalable implementations of transformer-based models, optimized for **high-speed TPU/GPU training** and **efficient inference**.  
 
-JAX brings composable function transformations (e.g., autodiff, JIT compilation, and vectorization) to Python+NumPy, while Flax provides a lightweight, flexible framework for neural networks. Together, they offer a cutting-edge environment for LLM research and development, optimized for GPUs, TPUs, and beyond.
+> [!IMPORTANT]
+> The implementations are for educational purposes only, which means it is not for any production but it covers all components of the models and can be changed to fit production needs.
 
-Contributions are welcome! See the [Contributing](#contributing) section below.
+## 🛠 **Features**  
+- ✅ **Multiple LLM architectures implemented in JAX/Flax**  
+- ✅ **Optimized for TPU acceleration with JAX’s XLA compiler**  
+- ✅ **Highly modular & extensible codebase**  
+- ✅ **Efficient training with Optax optimizers**  
+- ✅ **Hugging Face support to train on various datasets**  
+- ⏳ **Fine-tuning support (Coming Soon!)**  
 
----
+## 📚 **Implemented Models**  
 
-## Table of Contents
+### ✅ **GPT-2 - JAX/Flax**  
+A compact transformer-based language model implemented in **pure JAX/Flax**. This implementation leverages **XLA optimizations** for parallelism, making it efficient on **TPUs and GPUs**. It serves as the foundation for exploring JAX-based language modeling.  
 
-- [Why JAX and Flax for LLMs?](#why-jax-and-flax-for-llms)
-- [Libraries](#libraries)
-- [Models and Projects](#models-and-projects)
-- [Tutorials and Resources](#tutorials-and-resources)
-- [Tools](#tools)
-- [Contributing](#contributing)
-- [License](#license)
+📌 *Notebook: `models/gpt-2/gpt2_in_jax.ipynb`*  
+📌 *Scripts: `models/gpt-2/train.py`*
+             *`models/gpt-2/model.py`*
 
----
+### ✅ **Llama 3 - JAX/Flax**  
+An extension of the Llama series, incorporating **state-of-the-art optimizations** in JAX for handling **longer context windows** and **reduced memory footprint** with precision tuning. 
 
-## Why JAX and Flax for LLMs?
+📌 *Notebook: `models/llama3/llama3_in_jax.ipynb`*  
+📌 *Script: `models/llama3/train.py`* 
+            *`models/llama3/model.py`*
 
-- **Performance**: JAX's XLA compilation accelerates computations on accelerators like GPUs and TPUs, making it ideal for scaling LLM training.
-- **Flexibility**: Flax’s modular design lets you customize architectures and training loops without rigid frameworks.
-- **Functional Paradigm**: Pure functions and explicit state management enable reproducible, debuggable LLM workflows.
-- **Ecosystem**: A growing community of JAX-based tools (e.g., Optax, Equinox) enhances LLM development.
+### ⏳ **Gemma - JAX/Flax** (WIP)
+A lightweight, open-weight transformer model from Google, implemented in **pure JAX/Flax**. This version emphasizes **modular design**, efficient **parameter sharing**, and **scalability** across TPUs/GPUs. Ideal for experimentation with **instruction tuning** and **alignment** techniques.  
 
-Whether you're pre-training a massive model, fine-tuning on a specific task, or experimenting with novel architectures, JAX and Flax provide the tools to push the boundaries of LLM research.
+⏳ *Notebook: `models/gemma/gemma_in_jax.ipynb`*  
+📌 *Script: `models/gemma/model.py`*
+           *`models/gpt-2/train.py`*
 
----
+Let me know if you want to add details like architecture size, tokenizer notes, or integration hooks.
 
-## Libraries
+### 📅 **DeepSeek-R1 - JAX/Flax (Coming Soon)**  
+A **cutting-edge deep learning model** designed for **highly efficient semantic search**, leveraging **advanced transformer architectures** and **optimizations in JAX** for **faster retrieval and reduced computational costs**.
 
-A selection of libraries tailored for LLMs in the JAX/Flax ecosystem:
-
-- **[Flax](https://github.com/google/flax)** - A neural network library for JAX designed for flexibility, with support for transformers and LLMs.
-- **[HuggingFace Transformers (Flax)](https://github.com/huggingface/transformers)** - Pretrained transformer models (e.g., BERT, GPT) with Flax support for natural language tasks.
-- **[EasyLM](https://github.com/young-geng/EasyLM)** - A one-stop solution for pre-training, fine-tuning, evaluating, and serving LLMs in JAX/Flax.
-- **[Optax](https://github.com/deepmind/optax)** - Gradient processing and optimization library for training LLMs efficiently.
-- **[Equinox](https://github.com/patrick-kidger/equinox)** - Elegant neural networks in JAX with callable PyTrees and JIT/grad transformations.
-- **[Levanter](https://github.com/stanford-crfm/levanter)** - Scalable, legible foundation models with named tensors in JAX.
-
----
-
-## Models and Projects
-
-Notable LLM implementations and projects built with JAX and Flax:
-
-- **[DeepSeek-R1-Flax-1.5B-Distill](https://github.com/example/deepseek-r1-flax)** - Flax implementation of a distilled 1.5B parameter reasoning LLM.
-- **[Performer](https://github.com/google-research/google-research)** - Flax implementation of the Performer architecture (linear transformers via FAVOR+).
-- **[Whisper-JAX](https://github.com/sanchit-gandhi/whisper-jax)** - JAX/Flax implementation of OpenAI’s Whisper model, optimized for up to 70x speed-up on TPUs.
-- **[Flax Models](https://github.com/matthias-wright/flaxmodels)** - Pretrained models (e.g., GPT-2) in Flax for easy integration.
-- **[EasyDeL](https://github.com/erfanzar/EasyDeL)** - Streamlined training and serving of LLMs in JAX, with support for 8/6/4-bit inference.
+### 📅 **Mistral - JAX/Flax (Coming Soon)**  
+A high-performance implementation of the **Mistral architecture**, featuring **dense & sparse mixture-of-expert layers**. This model will showcase **advanced TPU utilization** and optimized autoregressive decoding.  
 
 ---
 
-## Tutorials and Resources
+## 📖 **Usage**  
 
-Learn to harness JAX and Flax for LLMs with these guides:
+### **Recommended Environment: Google Colab**  
+These models are best run in **Google Colab**, which provides **free TPU support** for optimal performance.  
 
-- **[JAX Documentation](https://jax.readthedocs.io/)** - Official docs for JAX’s core features (grad, jit, vmap, pmap).
-- **[Flax Documentation](https://flax.readthedocs.io/)** - Guides on Flax NNX and Linen APIs for building models.
-- **[Machine Learning with JAX](https://github.com/gordicaleksa/get-started-with-JAX)** - Tutorials covering JAX, Flax, and Haiku basics.
-- **[JAX, Flax & Transformers Talks](https://huggingface.co)** - Hugging Face’s 3-day series on JAX/Flax and transformers.
-- **[Simple Training Loop in JAX/Flax](https://github.com/soumik12345/jax-series)** - A hands-on example of training with JAX and Flax.
+### **Running the Notebooks**  
+Each model has its own Jupyter notebook. Navigate to the respective directories and open the notebook in **Google Colab** to explore the implementations.  
 
 ---
 
-## Tools
+## 🔥 **Next Steps**  
+- 🏗 **Fine-tuning Support**: Enabling training on custom datasets.  
+- ⚡ **Larger Model Implementations**: Expanding the repo with more LLMs.  
 
-Enhance your LLM workflow with these JAX/Flax-compatible tools:
+## 📖 **References**
 
-- **[Chex](https://github.com/deepmind/chex)** - Utilities for writing and testing reliable JAX code.
-- **[Penzai](https://github.com/google/penzai)** - Tools for legible, visualized, and editable neural network models in JAX.
-- **[SafeJAX](https://github.com/TheCamusean/safejax)** - Serialize JAX/Flax model parameters with safetensors.
-- **[JAXTyping](https://github.com/google/jaxtyping)** - Type annotations for shape and dtype checking in JAX.
+[1] HighPerfLLMs2024. Available: https://github.com/rwitten/HighPerfLLMs2024
 
----
+[2] JAX Scaling Book. Available: https://jax-ml.github.io/scaling-book/
 
-## Contributing
 
-We’d love your help to make this list even more awesome! To contribute:
-
-1. Fork this repository.
-2. Add your resource to the appropriate section in `README.md`.
-3. Ensure it’s relevant to JAX, Flax, or LLMs.
-4. Submit a pull request with a brief description of your addition.
-
-Please follow the format: `- **[Name](URL)** - Short description.`
+## 📜 **License**  
+This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See the [LICENSE](LICENSE) file for details.  
 
 ---
 
-## License
-
-This repository is licensed under the [GNU GPL 3 License](LICENSE). Feel free to use, share, and adapt this collection as you see fit.
-
----
-
-*Last updated: April 01, 2025*
+💡 *Contributions are welcome! Feel free to submit issues and pull requests.*  
 
 ---
