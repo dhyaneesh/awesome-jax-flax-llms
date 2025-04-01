@@ -94,7 +94,7 @@ Please follow the format: `- **[Name](URL)** - Short description.`
 
 ## License
 
-This repository is licensed under the [MIT License](LICENSE). Feel free to use, share, and adapt this collection as you see fit.
+This repository is licensed under the [GNU GPL 3 License](LICENSE). Feel free to use, share, and adapt this collection as you see fit.
 
 ---
 
